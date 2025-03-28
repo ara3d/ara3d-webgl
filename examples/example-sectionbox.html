@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Example Sectionbox</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<script type="module">
+  import * as ARA3D from '../src/index'
+
+  async function runExample() {
+    const viewer = new ARA3D.Viewer();
+    const loader = new ARA3D.VimLoader()
+    const vim = await loader.load('/residence.vim', console);
+    viewer.add(vim)
+
+
+    // Enable interactive section box
+    viewer.sectionBox.clip = true
+    viewer.sectionBox.interactive = true
+    viewer.sectionBox.visible = true
+
+    // Get two object from the revit ids.
+    const vimObjects = [
+      ...vim.getObjectsFromElementId(183470),
+      ...vim.getObjectsFromElementId(201739),
+    ]
+    // Select found objects
+    viewer.selection.select(vimObjects)
+
+    // Update the section box to fit selection.
+    const bbox = viewer.selection.getBoundingBox()
+    viewer.sectionBox.fitBox(bbox)
+    viewer.selection.clear()
+  }
+
+  runExample()
+</script>
+</body>
+</html>

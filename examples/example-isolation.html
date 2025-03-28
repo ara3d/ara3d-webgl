@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Example Isolation</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<script type="module">
+  import * as ARA3D from '../src/index'
+
+  async function runExample() {
+    const viewer = new ARA3D.Viewer();
+    const loader = new ARA3D.VimLoader()
+    const vim = await loader.load('/residence.vim', console);
+    viewer.add(vim)
+
+    // Hide all objects
+    for (const obj of vim.getAllObjects()) {
+      obj.visible = false
+    }
+
+    // Except our target which we select and frame.
+    const obj = vim.getObjectFromElement(123)
+    obj.visible = true
+    viewer.selection.select(obj)
+    viewer.camera.lerp(1).frame(obj)
+
+    // Override scene material with the isolation material which shows hidden object as ghosts
+    vim.scene.material = viewer.materials.isolation
+  }
+
+  runExample()
+</script>
+</body>
+</html>

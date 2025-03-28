@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Example Multiple VIMs</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<script type="module">
+  import * as ARA3D from '../src/index'
+  import * as THREE from 'three'
+
+  async function runExample() {
+    const viewer = new ARA3D.Viewer();
+    const loader = new ARA3D.VimLoader()
+
+    viewer.add(await loader.load('/residence.vim', console, { position: new THREE.Vector3(-50, 0, -50) }));
+    viewer.add(await loader.load('/residence.vim', console, { position: new THREE.Vector3(-50, 0, 50) }));
+    viewer.add(await loader.load('/residence.vim', console, { position: new THREE.Vector3(50, 0, -50) }));
+    viewer.add(await loader.load('/residence.vim', console, { position: new THREE.Vector3(50, 0, 50) }));
+  }
+
+  runExample()
+</script>
+</body>
+</html>

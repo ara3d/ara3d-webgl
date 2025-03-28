@@ -1,0 +1,261 @@
+<!DOCTYPE html><html class="default" lang="en"><head><meta charSet="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>ara3d-webgl</title><meta name="description" content="Documentation for ara3d-webgl"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script async src="assets/search.js" id="search-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os"</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container">
+<div class="table-cell" id="tsd-search" data-base=".">
+<div class="field"><label for="tsd-search-field" class="tsd-widget tsd-toolbar-icon search no-caption"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M15.7824 13.833L12.6666 10.7177C12.5259 10.5771 12.3353 10.499 12.1353 10.499H11.6259C12.4884 9.39596 13.001 8.00859 13.001 6.49937C13.001 2.90909 10.0914 0 6.50048 0C2.90959 0 0 2.90909 0 6.49937C0 10.0896 2.90959 12.9987 6.50048 12.9987C8.00996 12.9987 9.39756 12.4863 10.5008 11.6239V12.1332C10.5008 12.3332 10.5789 12.5238 10.7195 12.6644L13.8354 15.7797C14.1292 16.0734 14.6042 16.0734 14.8948 15.7797L15.7793 14.8954C16.0731 14.6017 16.0731 14.1267 15.7824 13.833ZM6.50048 10.499C4.29094 10.499 2.50018 8.71165 2.50018 6.49937C2.50018 4.29021 4.28781 2.49976 6.50048 2.49976C8.71001 2.49976 10.5008 4.28708 10.5008 6.49937C10.5008 8.70852 8.71314 10.499 6.50048 10.499Z" fill="var(--color-text)"></path></svg></label><input type="text" id="tsd-search-field" aria-label="Search"/></div>
+<div class="field">
+<div id="tsd-toolbar-links"></div></div>
+<ul class="results">
+<li class="state loading">Preparing search index...</li>
+<li class="state failure">The search index is not available</li></ul><a href="index.html" class="title">ara3d-webgl</a></div>
+<div class="table-cell" id="tsd-widgets"><a href="#" class="tsd-widget tsd-toolbar-icon menu no-caption" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="2" fill="var(--color-text)"></rect><rect x="1" y="7" width="14" height="2" fill="var(--color-text)"></rect><rect x="1" y="11" width="14" height="2" fill="var(--color-text)"></rect></svg></a></div></div></header>
+<div class="container container-main">
+<div class="col-8 col-content">
+<div class="tsd-page-title">
+<h2>ara3d-webgl</h2></div>
+<div class="tsd-panel tsd-typography">
+<a href="#ara-3d-webgl-viewer" id="ara-3d-webgl-viewer" style="color: inherit; text-decoration: none;">
+  <h1>Ara 3D WebGL Viewer</h1>
+</a>
+<p>A WebGL viewer for AEC models built on <a href="https://threejs.org">Three.JS</a> and forked from <a href="https://github.com/vimaec/vim-webgl-viewer">https://github.com/vimaec/vim-webgl-viewer</a>.</p>
+
+<a href="#motivation" id="motivation" style="color: inherit; text-decoration: none;">
+  <h2>Motivation</h2>
+</a>
+<p>At <a href="https://ara3d.com">Ara 3D</a> we, along with our partners and customers, needed 
+a simple open-source library to efficiently load and display large 3D BIM models in WebGL.</p>
+<p>We needed the viewer to be easy to customize for different use cases while providing 
+support for large numbers of similar objects, which is common in BIM models.</p>
+
+<a href="#why-this-viewer-and-not-another" id="why-this-viewer-and-not-another" style="color: inherit; text-decoration: none;">
+  <h2>Why This Viewer and not Another?</h2>
+</a>
+<p>There are many excellent WebGL viewers (see the Appendix below). 
+Three.JS makes writing a simple one easy, at least at first. 
+Adding common features quickly turns into a lot of work, especially if you have 
+large architectural or BIM models with lots of objects. </p>
+<p>This library is a good starting point for your own 3D viewing needs if you want:</p>
+<ol>
+<li>a commercially friendly open-source library (MIT)</li>
+<li>to build from a widely used Web GL library (Three.JS)</li>
+<li>to efficiently display data with a lot of instanced geometry (i.e., repeated meshes in different positions and orientations) </li>
+<li>features like section boxes, hit-testing, outlining, and camera controls </li>
+<li>good quality and easy to understand TypeScript code. </li>
+<li>to integrate into your own branded front-end code </li>
+<li>minimal dependencies</li>
+</ol>
+
+<a href="#features" id="features" style="color: inherit; text-decoration: none;">
+  <h2>Features</h2>
+</a>
+<ul>
+<li>Mouse, keyboard, and touch input </li>
+<li>Orbit and first person camera controls  </li>
+<li>Highlighting</li>
+<li>Outlining </li>
+<li>Transparency</li>
+<li>Isolation with ghosting </li>
+<li>Zoom to extents </li>
+<li>Section boxes</li>
+<li>Hit testing</li>
+</ul>
+
+<a href="#history" id="history" style="color: inherit; text-decoration: none;">
+  <h2>History</h2>
+</a>
+<p>At Ara3D we created a simple 3D web-viewer in March 2019 which had support for multiple file formats. </p>
+<p>The <a href="https://vimaec.com">VIM</a> team took over the project in July 2021 and the team, mostly <a href="https://github.com/vim-sroberge">Simon Roberge</a>, 
+added many features and enhancements. They also customized the project to meet the needs of their 
+PowerBI offering.  </p>
+<p>On December 17, 2024, the VIM team archived the project, and merged it with their React-based viewer 
+project into a new repository <a href="https://github.com/vimaec/vim-web">https://github.com/vimaec/vim-web</a>. Today the VIM viewer is very powerful, 
+but has become very specialized to their use-cases.</p>
+<p>This project revives the spirit of the original viewer, while leveraging many of the excellent
+contributions made by VIM. This repository was created on March 26th 2025 from a snapshot of the VIM repository 
+from 2022, but with some significant refactoring.</p>
+<p>We also took the excellent examples that were created by Simon and compiled them in a single easy to view demo.</p>
+
+<a href="#what-has-changed-from-vimaec-web" id="what-has-changed-from-vimaec-web" style="color: inherit; text-decoration: none;">
+  <h3>What has Changed from VIMAEC Web</h3>
+</a>
+<p>There are a number of differences between this project and the one currently <a href="https://github.com/vimaec/vim-web">maintained by VIM</a>:</p>
+<ul>
+<li>Removed all code related to:<ul>
+<li>The React UI framework </li>
+<li>Support for pixel-streaming, their &quot;ultra-viewer&quot;</li>
+</ul>
+</li>
+<li>Removed dead and unused code and files  </li>
+<li>Added examples that can be easily tested from the Vite dev server</li>
+<li>Restructured the files and folders</li>
+</ul>
+
+<a href="#building-and-running" id="building-and-running" style="color: inherit; text-decoration: none;">
+  <h2>Building and Running</h2>
+</a>
+<p>The project uses <a href="https://vite.dev/">vite</a> for bundling and development. </p>
+<p>Some of the common tasks, which can be found in the <code>package.json</code>.</p>
+<ul>
+<li><code>npm run dev</code> - Running the vite dev server with &quot;hot reloading&quot; </li>
+<li><code>npm run build:docs</code> - Building the examples and API documentation. </li>
+<li><code>npm run serve:docs</code> - Testing the built examples and API documentation locally </li>
+<li><code>npm run build:lib</code> - Building the library as a JavaScript module (<code>.mjs</code>) file</li>
+</ul>
+
+<a href="#camera-controls" id="camera-controls" style="color: inherit; text-decoration: none;">
+  <h2>Camera Controls</h2>
+</a>
+
+<a href="#keyboard" id="keyboard" style="color: inherit; text-decoration: none;">
+  <h3>Keyboard</h3>
+</a>
+<ul>
+<li><p><code>W</code>, <code>Up</code> - Move camera forward  </p>
+</li>
+<li><p><code>A</code>, <code>Left</code> - Move camera to the left  </p>
+</li>
+<li><p><code>S</code>, <code>Down</code> - Move camera backward  </p>
+</li>
+<li><p><code>D</code>, <code>Right</code> - Move camera to the right  </p>
+</li>
+<li><p><code>E</code> -  Move camera up  </p>
+</li>
+<li><p><code>Q</code> - Move camera down  </p>
+</li>
+<li><p><code>Shift</code> - faster camera movement while pressed  </p>
+</li>
+<li><p><code>+</code> - Increase camera speed  </p>
+</li>
+<li><p><code>-</code> - Decrease camera speed</p>
+</li>
+<li><p><code>Space</code> - Toggle orbit mode  </p>
+</li>
+<li><p><code>Home</code> - Frame model  </p>
+</li>
+<li><p><code>Escape</code> - Clear selection  </p>
+</li>
+<li><p><code>F</code> Frame selection</p>
+</li>
+</ul>
+
+<a href="#mouse" id="mouse" style="color: inherit; text-decoration: none;">
+  <h3>Mouse</h3>
+</a>
+<ul>
+<li><code>Hold left click + Move mouse</code> - Rotate camera in current mode  </li>
+<li><code>Hold right click + Move mouse</code> - Pan/tilt camera</li>
+<li><code>Hold middle click + Move mouse</code> - Truck/pedestal camera</li>
+<li><code>Mouse wheel</code> - Dolly Camera  </li>
+<li><code>Left click</code> - Select object  </li>
+<li><code>Ctrl + Mouse wheel</code> - Increase/decrease camera speed</li>
+</ul>
+
+<a href="#touch" id="touch" style="color: inherit; text-decoration: none;">
+  <h3>Touch</h3>
+</a>
+<ul>
+<li><code>One Finger swipe</code> - Tilt/Pan camera  </li>
+<li><code>Two Finger swipe</code> - Truck/Pedestal camera  </li>
+<li><code>Two Finger pinch/spread</code> - Dolly Camera</li>
+</ul>
+
+<a href="#roadmap" id="roadmap" style="color: inherit; text-decoration: none;">
+  <h1>Roadmap</h1>
+</a>
+<p>What is on the horizon:</p>
+<ul>
+<li>Inline the VIM, G3D, and BFAST code in this project (and clean it up)</li>
+<li>Support for more file formats</li>
+<li>More demos</li>
+<li>Improved scene management</li>
+<li>Performance tests and benchmarks</li>
+<li>Improved performance</li>
+<li>Streaming and LOD (Level of Detail) support</li>
+</ul>
+
+<a href="#requesting-features-improvements-or-changes" id="requesting-features-improvements-or-changes" style="color: inherit; text-decoration: none;">
+  <h2>Requesting Features, Improvements, or Changes</h2>
+</a>
+<p>Feel free to log issues or submit pull requests.  </p>
+<p>We also offer very affordable custom software development services if you are using this project in a 
+commercial context. For more information reach out to us at <a href="mailto:info@ara3d.com">info@ara3d.com</a>.</p>
+
+<a href="#appendix" id="appendix" style="color: inherit; text-decoration: none;">
+  <h1>Appendix</h1>
+</a>
+
+<a href="#related-projects-webgl-viewers" id="related-projects-webgl-viewers" style="color: inherit; text-decoration: none;">
+  <h2>Related Projects: WebGL Viewers</h2>
+</a>
+<ul>
+<li><a href="https://viewer.autodesk.com/">Autodesk Viewer</a></li>
+<li><a href="https://www.itwinjs.org/">Bentley iTwin</a></li>
+<li><a href="https://www.babylonjs.com/">Babylon.JS</a></li>
+<li><a href="https://bldrs.ai/">Bldrs.AI</a></li>
+<li><a href="https://sandcastle.cesium.com/?src=Cesium%20OSM%20Buildings.html">Cesium</a></li>
+<li><a href="https://github.com/KhronosGroup/glTF-Sample-Viewer">glTF Sample Viewer</a></li>
+<li><a href="https://github.com/ThatOpen/engine_web-ifc">That Open Engine - Web IFC</a></li>
+<li><a href="https://github.com/McCulloughRT/Rvt3js">Revit 3JS</a></li>
+<li><a href="https://github.com/specklesystems/speckle-server">Speckle</a></li>
+<li><a href="https://va3c.github.io/">vA3C</a></li>
+<li><a href="https://github.com/vimaec/vim-web">VIMAEC Web</a></li>
+<li><a href="https://github.com/xBimTeam/XbimWebUI">XBim Web UI</a></li>
+<li><a href="https://github.com/xeokit/xeokit-sdk">Xeokit</a></li>
+</ul>
+</div></div>
+<div class="col-4 col-menu menu-sticky-wrap menu-highlight">
+<div class="tsd-navigation settings">
+<details class="tsd-index-accordion"><summary class="tsd-accordion-summary">
+<h3><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4.93896 8.531L12 15.591L19.061 8.531L16.939 6.409L12 11.349L7.06098 6.409L4.93896 8.531Z" fill="var(--color-text)"></path></svg> Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility">
+<h4 class="uppercase">Member Visibility</h4><form>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></form></div>
+<div class="tsd-theme-toggle">
+<h4 class="uppercase">Theme</h4><select id="theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<nav class="tsd-navigation primary">
+<details class="tsd-index-accordion" open><summary class="tsd-accordion-summary">
+<h3><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4.93896 8.531L12 15.591L19.061 8.531L16.939 6.409L12 11.349L7.06098 6.409L4.93896 8.531Z" fill="var(--color-text)"></path></svg> Modules</h3></summary>
+<div class="tsd-accordion-details">
+<ul>
+<li class="current selected"><a href="modules.html">ara3d-<wbr/>webgl</a>
+<ul>
+<li class="tsd-kind-module"><a href="modules/images.html">images</a></li>
+<li class="tsd-kind-module"><a href="modules/index.html">index</a>
+<ul>
+<li class="tsd-kind-namespace tsd-parent-kind-module tsd-is-external"><a href="modules/index.Format.html">Format</a>
+<ul>
+<li class="tsd-kind-namespace tsd-parent-kind-namespace tsd-is-external"><a href="modules/index.Format.VimHelpers.html">Vim<wbr/>Helpers</a></li></ul></li>
+<li class="tsd-kind-namespace tsd-parent-kind-module tsd-is-external"><a href="modules/index.THREE.html">THREE</a>
+<ul>
+<li class="tsd-kind-namespace tsd-parent-kind-namespace tsd-is-external"><a href="modules/index.THREE.AnimationUtils.html">Animation<wbr/>Utils</a></li>
+<li class="tsd-kind-namespace tsd-parent-kind-namespace tsd-is-external"><a href="modules/index.THREE.AudioContext.html">Audio<wbr/>Context</a></li>
+<li class="tsd-kind-namespace tsd-parent-kind-namespace tsd-is-external"><a href="modules/index.THREE.BufferGeometryUtils.html">Buffer<wbr/>Geometry<wbr/>Utils</a></li>
+<li class="tsd-kind-namespace tsd-parent-kind-namespace tsd-is-external"><a href="modules/index.THREE.Cache.html">Cache</a></li>
+<li class="tsd-kind-namespace tsd-parent-kind-namespace tsd-is-external"><a href="modules/index.THREE.CurveUtils.html">Curve<wbr/>Utils</a></li>
+<li class="tsd-kind-namespace tsd-parent-kind-namespace tsd-is-external"><a href="modules/index.THREE.Earcut.html">Earcut</a></li>
+<li class="deprecated tsd-kind-namespace tsd-parent-kind-namespace tsd-is-external"><a href="modules/index.THREE.GeometryUtils.html">Geometry<wbr/>Utils</a></li>
+<li class="tsd-kind-namespace tsd-parent-kind-namespace tsd-is-external"><a href="modules/index.THREE.ImageUtils.html">Image<wbr/>Utils</a></li>
+<li class="tsd-kind-namespace tsd-parent-kind-namespace tsd-is-external"><a href="modules/index.THREE.MathUtils.html">Math<wbr/>Utils</a></li>
+<li class="tsd-kind-namespace tsd-parent-kind-namespace tsd-is-external"><a href="modules/index.THREE.PropertyBinding.html">Property<wbr/>Binding</a></li>
+<li class="tsd-kind-namespace tsd-parent-kind-namespace tsd-is-external"><a href="modules/index.THREE.ShapeUtils.html">Shape<wbr/>Utils</a></li>
+<li class="tsd-kind-namespace tsd-parent-kind-namespace tsd-is-external"><a href="modules/index.THREE.UniformsUtils.html">Uniforms<wbr/>Utils</a></li></ul></li></ul></li>
+<li class="tsd-kind-module"><a href="modules/utils_ILogger.html">utils/ILogger</a></li>
+<li class="tsd-kind-module"><a href="modules/vim_loader.html">vim-<wbr/>loader</a>
+<ul>
+<li class="tsd-kind-namespace tsd-parent-kind-module"><a href="modules/vim_loader.Geometry.html">Geometry</a></li>
+<li class="tsd-kind-namespace tsd-parent-kind-module"><a href="modules/vim_loader.Transparency.html">Transparency</a></li></ul></li>
+<li class="tsd-kind-module"><a href="modules/vim_loader_materials.html">vim-<wbr/>loader/materials</a></li>
+<li class="tsd-kind-module"><a href="modules/vim_loader_subMesh.html">vim-<wbr/>loader/sub<wbr/>Mesh</a></li>
+<li class="tsd-kind-module"><a href="modules/viw_webgl_viewer.html">viw-<wbr/>webgl-<wbr/>viewer</a></li>
+<li class="tsd-kind-module"><a href="modules/viw_webgl_viewer_camera.html">viw-<wbr/>webgl-<wbr/>viewer/camera</a></li>
+<li class="tsd-kind-module"><a href="modules/viw_webgl_viewer_gizmos.html">viw-<wbr/>webgl-<wbr/>viewer/gizmos</a></li>
+<li class="tsd-kind-module"><a href="modules/viw_webgl_viewer_gizmos_measure.html">viw-<wbr/>webgl-<wbr/>viewer/gizmos/measure</a></li>
+<li class="tsd-kind-module"><a href="modules/viw_webgl_viewer_gizmos_sectionBox.html">viw-<wbr/>webgl-<wbr/>viewer/gizmos/section<wbr/>Box</a></li>
+<li class="tsd-kind-module"><a href="modules/viw_webgl_viewer_inputs.html">viw-<wbr/>webgl-<wbr/>viewer/inputs</a></li>
+<li class="tsd-kind-module"><a href="modules/viw_webgl_viewer_rendering.html">viw-<wbr/>webgl-<wbr/>viewer/rendering</a></li></ul></li></ul></div></details></nav></div></div>
+<div class="container tsd-generator">
+<p>Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></div>
+<div class="overlay"></div><script src="assets/main.js"></script></body></html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Example Coloring</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<script type="module">
+  import * as ARA3D from '../src/index'
+  import * as THREE from 'three'
+
+  async function runExample() {
+    const viewer = new ARA3D.Viewer();
+    const loader = new ARA3D.VimLoader()
+    const vim = await loader.load('/residence.vim', console);
+    viewer.add(vim)
+
+    // get all bim objects with geometry
+    const all = [...vim.getAllObjects()].filter((o) => o.hasMesh)
+
+    // get objects center
+    const pos = all.map((o) => o.getCenter())
+
+    // compute position ranges to create appropriate colors
+    const minX = Math.min(...pos.map((p) => p.x))
+    const minY = Math.min(...pos.map((p) => p.y))
+    const minZ = Math.min(...pos.map((p) => p.z))
+    const maxX = Math.max(...pos.map((p) => p.x))
+    const maxY = Math.max(...pos.map((p) => p.y))
+    const maxZ = Math.max(...pos.map((p) => p.z))
+
+    // assign a color to each object based on its location.
+    for (let i = 0; i < all.length; i++) {
+      all[i].color = new THREE.Color(
+        (pos[i].x - minX) / (maxX - minX),
+        (pos[i].y - minY) / (maxY - minY),
+        (pos[i].z - minZ) / (maxZ - minZ))
+    }
+  }
+
+  runExample()
+</script>
+</body>
+</html>

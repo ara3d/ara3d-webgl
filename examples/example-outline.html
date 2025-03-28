@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Example Outline</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<script type="module">
+  import * as ARA3D from '../src/index'
+
+  async function runExample() {
+    const viewer = new ARA3D.Viewer();
+    const loader = new ARA3D.VimLoader()
+    const vim = await loader.load('/residence.vim', console);
+    viewer.add(vim)
+
+    // get all bim objects with geometry
+    const all = [...vim.getAllObjects()].filter((o) => o.hasMesh)
+
+    for (let i = 0; i < all.length; i++) {
+      // get bim family name for object element.
+      const element = await all[i].getBimElement()
+      const name = element.familyName
+
+      // add outline to all windows.
+      // note that selection also uses the outline api.
+      if (typeof name === 'string' && name.includes('Window')) {
+        all[i].outline = true
+      }
+    }
+  }
+
+  runExample()
+</script>
+</body>
+</html>

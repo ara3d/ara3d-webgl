@@ -1,0 +1,136 @@
+.measure {
+  background-color: white;
+}
+
+.measure table {
+  border-collapse: collapse;
+}
+
+.measure table tr {
+  border: 1px solid black;
+}
+
+.measure-label-d,
+.measure-label-x,
+.measure-label-y,
+.measure-label-z {
+  color: white;
+  width: 10px;
+  text-align: center;
+  padding: 5px;
+}
+
+.measure-label-d {
+  background-color: black;
+}
+.measure-label-x {
+  background-color: red;
+}
+.measure-label-y {
+  background-color: green;
+}
+.measure-label-z {
+  background-color: blue;
+}
+
+.measure-value-d,
+.measure-value-x,
+.measure-value-y,
+.measure-value-z {
+  text-align: center;
+  padding: 5px;
+}
+
+/* style as needed */
+body, html {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+#overlayBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+/* Reset some default browser styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  color: #333;
+  background-color: #f9f9f9;
+  /* Use Flexbox for the layout */
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+}
+
+/* Sidebar styling */
+#sidebar {
+  background-color: #fff;
+  min-width: 200px;
+  border-right: 1px solid #ddd;
+  padding: 20px;
+}
+
+/* Sidebar title */
+#sidebar h1 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+/* Sidebar list styling */
+#sidebar ul {
+  list-style: none;
+}
+
+#sidebar ul li {
+  margin-bottom: 0.5rem;
+}
+
+/* Sidebar link styling */
+#sidebar ul li a {
+  text-decoration: none;
+  color: #333;
+  padding: 5px 10px;
+  display: inline-block;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+
+/* Active link highlight */
+#sidebar ul li a.active {
+  background-color: #ddd;
+  font-weight: bold;
+}
+
+#sidebar ul li a:hover {
+  background-color: #efefef;
+}
+
+/* Main area styling */
+#main {
+  flex: 1; /* Fill remaining space in the row */
+  padding: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Iframe styling */
+#iframe,
+iframe#exampleFrame {
+  width: 100%;
+  flex: 1; /* Fill the vertical space */
+  border: none;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}

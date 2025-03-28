@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ara 3D WebGL Viewer Examples</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<div id="sidebar">
+  <h1>Examples</h1>
+  <ul id="exampleList">
+    <li><a href="example-basic.html" target="exampleFrame">Basic Example</a></li>
+    <li><a href="example-multivim.html" target="exampleFrame">Multiple VIMs Example</a></li>
+    <li><a href="example-colors.html" target="exampleFrame">Colors Example</a></li>
+    <li><a href="example-isolation.html" target="exampleFrame">Isolation Example</a></li>
+    <li><a href="example-outline.html" target="exampleFrame">Outline Example</a></li>
+    <li><a href="example-sectionbox.html" target="exampleFrame">Section Box Example</a></li>
+    <li><a href="example-visibility.html" target="exampleFrame">Visibility Example</a></li>
+  </ul>
+</div>
+
+<div id="main">
+  <iframe id="exampleFrame" name="exampleFrame" src="example-basic.html"></iframe>
+</div>
+
+<!-- JavaScript to highlight the active link -->
+<script>
+  // Grab the iframe and all links in the sidebar
+  const exampleFrame = document.getElementById('exampleFrame');
+  const links = document.querySelectorAll('#exampleList a');
+
+  // A helper function to remove "active" from all links,
+  // then add it to the link whose href matches the loaded page
+  function setActiveLink(href) {
+    links.forEach(link => {
+      link.classList.remove('active');
+      // If the link's href ends with the same name as the iframe's loaded page,
+      // we'll add the "active" class to highlight it.
+      if (link.getAttribute('href') === href) {
+        link.classList.add('active');
+      }
+    });
+  }
+
+  // 1) Set the highlight for the default page (example-basic.html)
+  setActiveLink('example-basic.html');
+
+  // 2) Whenever the iframe finishes loading a page,
+  //    compare the loaded page’s filename with the sidebar links
+  exampleFrame.addEventListener('load', () => {
+    // For local files, we can split on '/' and take the last part
+    const currentUrl = exampleFrame.contentWindow.location.href.split('/').pop();
+    setActiveLink(currentUrl);
+  });
+</script>
+<script type="module">
+  import * as ARA3D from '../src/index'
+  console.log(ARA3D)
+</script>
+</body>
+</html>

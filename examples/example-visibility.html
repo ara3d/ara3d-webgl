@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Example Visibility</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<script type="module">
+  import * as ARA3D from '../src/index'
+  import * as THREE from 'three'
+
+  async function runExample() {
+    const viewer = new ARA3D.Viewer();
+    const loader = new ARA3D.VimLoader()
+    const vim = await loader.load('/residence.vim', console);
+    viewer.add(vim)
+
+    // get all bim objects with geometry
+    const all = [...vim.getAllObjects()].filter((o) => o.hasMesh)
+
+    // get radius from each object bounding box
+    const radius = all.map(
+      (o) => o
+        .getBoundingBox()
+        .getBoundingSphere(new THREE.Sphere())
+        .radius
+    )
+
+    // hide all small objects
+    for (let i = 0; i < all.length; i++) {
+      all[i].visible = radius[i] > 15
+    }
+  }
+
+  runExample()
+</script>
+</body>
+</html>

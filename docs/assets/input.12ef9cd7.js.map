@@ -1,0 +1,1 @@
+{"version":3,"file":"input.12ef9cd7.js","sources":["../../examples/index.html?html-proxy&index=0.js"],"sourcesContent":["\n  import * as ARA3D from '../src/index'\n  console.log(ARA3D)\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAEE,QAAQ,IAAI,KAAK;"}
