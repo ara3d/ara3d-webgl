@@ -14,10 +14,10 @@
     const viewer = new ARA3D.Viewer();
     const loader = new ARA3D.VimLoader()
 
-    viewer.add(await loader.load('/residence.vim', console, { position: new THREE.Vector3(-50, 0, -50) }));
-    viewer.add(await loader.load('/residence.vim', console, { position: new THREE.Vector3(-50, 0, 50) }));
-    viewer.add(await loader.load('/residence.vim', console, { position: new THREE.Vector3(50, 0, -50) }));
-    viewer.add(await loader.load('/residence.vim', console, { position: new THREE.Vector3(50, 0, 50) }));
+    viewer.add(await loader.load('/ara3d-webgl/residence.vim', console, { position: new THREE.Vector3(-50, 0, -50) }));
+    viewer.add(await loader.load('/ara3d-webgl/residence.vim', console, { position: new THREE.Vector3(-50, 0, 50) }));
+    viewer.add(await loader.load('/ara3d-webgl/residence.vim', console, { position: new THREE.Vector3(50, 0, -50) }));
+    viewer.add(await loader.load('/ara3d-webgl/residence.vim', console, { position: new THREE.Vector3(50, 0, 50) }));
   }
 
   runExample()

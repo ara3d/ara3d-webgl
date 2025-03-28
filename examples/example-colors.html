@@ -13,7 +13,7 @@
   async function runExample() {
     const viewer = new ARA3D.Viewer();
     const loader = new ARA3D.VimLoader()
-    const vim = await loader.load('/residence.vim', console);
+    const vim = await loader.load('/ara3d-webgl/residence.vim', console);
     viewer.add(vim)
 
     // get all bim objects with geometry

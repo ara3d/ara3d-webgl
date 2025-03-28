@@ -2,7 +2,7 @@ import { V as Viewer, d as VimLoader, C as Color } from "./vimLoader.55c78aa4.js
 async function runExample() {
   const viewer = new Viewer();
   const loader = new VimLoader();
-  const vim = await loader.load("/residence.vim", console);
+  const vim = await loader.load("/ara3d-webgl/residence.vim", console);
   viewer.add(vim);
   const all = [...vim.getAllObjects()].filter((o) => o.hasMesh);
   const pos = all.map((o) => o.getCenter());
@@ -21,4 +21,4 @@ async function runExample() {
   }
 }
 runExample();
-//# sourceMappingURL=exampleColors.5118f89c.js.map
+//# sourceMappingURL=exampleColors.67e02324.js.map
