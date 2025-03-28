@@ -2,20 +2,13 @@ import { defineConfig } from 'vite'
 import { resolve } from 'path'
 
 export default defineConfig({
+  base: '/ara3d-webgl/',
   root: resolve(__dirname, 'examples'),
   build: {
     outDir: resolve(__dirname, 'docs'),
     emptyOutDir: true,
     sourcemap: true,
     minify: false,
-    /*
-    lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
-      name: 'ara3d-webgl',    // Global name in UMD build if needed
-      fileName: (format) => `ara3d-webgl.${format}.js`,
-      formats: ['es']           // ES module output (could add 'umd' or others)
-    }
-    */
     rollupOptions: {
       input: {
         input: resolve(__dirname, 'examples/index.html'),
