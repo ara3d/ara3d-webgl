@@ -1,15 +1,17 @@
 # Ara 3D WebGL Viewer
 
-A WebGL viewer for AEC models built on [Three.JS](https://threejs.org) and forked from https://github.com/vimaec/vim-webgl-viewer.
+A **WebGL viewer** for large 3D models of buildings and infrastructure built on [Three.JS](https://threejs.org) and forked from [VIM-WebGL-Viewer](https://github.com/vimaec/vim-webgl-viewer).
 
-Try a live demo at: [https://ara3d.github.io/ara3d-webgl](https://ara3d.github.io/ara3d-webgl).
+👉 Try a [live demo](https://ara3d.github.io/ara3d-webgl) or a short [video on YouTube](https://www.youtube.com/watch?v=WUq6oUP684Y).
 
 [![Ara 3D WebGL Viewer Demo](https://img.youtube.com/vi/WUq6oUP684Y/0.jpg)](https://www.youtube.com/watch?v=WUq6oUP684Y)
 
+💬 We also welcome you to [join the conversation on Discord](https://discord.gg/gr7UV9Mat8).
+
 ## Motivation
 
-At [Ara 3D](https://ara3d.com) we, along with our partners and customers, needed 
-a simple open-source library to efficiently load and display large 3D BIM models in WebGL.
+At [Ara 3D](https://ara3d.com) along with our partners and customers who develop technology for AECO (Architecture Engineering Construction and Owners) professionals needed 
+a simple open-source library to efficiently load and display large 3D BIM (Building Information Modeling) models in WebGL.
 
 We needed the viewer to be easy to customize for different use cases while providing 
 support for large numbers of similar objects, which is common in BIM models.
