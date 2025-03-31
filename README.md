@@ -2,7 +2,7 @@
 
 A **WebGL viewer** for large 3D models of buildings and infrastructure built on [Three.JS](https://threejs.org) and forked from [VIM-WebGL-Viewer](https://github.com/vimaec/vim-webgl-viewer).
 
-👉 Try a [live demo](https://ara3d.github.io/ara3d-webgl) or a short [video on YouTube](https://www.youtube.com/watch?v=WUq6oUP684Y).
+👉 Try a [live demo](https://ara3d.github.io/ara3d-webgl), watch a short [video on YouTube](https://www.youtube.com/watch?v=WUq6oUP684Y), or [browse the docs](https://ara3d.github.io/ara3d-webgl/api).
 
 [![Ara 3D WebGL Viewer Demo](https://img.youtube.com/vi/WUq6oUP684Y/0.jpg)](https://www.youtube.com/watch?v=WUq6oUP684Y)
 
@@ -13,8 +13,9 @@ A **WebGL viewer** for large 3D models of buildings and infrastructure built on 
 At [Ara 3D](https://ara3d.com) along with our partners and customers who develop technology for AECO (Architecture Engineering Construction and Owners) professionals needed 
 a simple open-source library to efficiently load and display large 3D BIM (Building Information Modeling) models in WebGL.
 
-We needed the viewer to be easy to customize for different use cases while providing 
-support for large numbers of similar objects, which is common in BIM models.
+> "It's incredibly enjoyable to work with—strikes the perfect balance between built-in functionality like highlighting and zoom-to-extent features, without feeling overly prescriptive. Outstanding work 🙌" - [Louis Trümpler](https://www.linkedin.com/posts/louistrue_open-source-to-the-moon-just-created-activity-7311734789227638784-Lfrf). 
+ 
+We needed the viewer to be easy to customize for different use cases while providing support for large numbers of similar objects, which is common in BIM models.
 
 ## Why This Viewer and not Another?
 
