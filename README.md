@@ -2,7 +2,7 @@
 
 A **WebGL viewer** for large 3D models of buildings and infrastructure built on [Three.JS](https://threejs.org) and forked from [VIM-WebGL-Viewer](https://github.com/vimaec/vim-webgl-viewer).
 
-👉 Try a [live demo](https://ara3d.github.io/ara3d-webgl), watch a short [video on YouTube](https://www.youtube.com/watch?v=WUq6oUP684Y), or [browse the docs](https://ara3d.github.io/ara3d-webgl/api).
+👉 Try a [live demo](https://ara3d.github.io/ara3d-webgl), watch a short [video on YouTube](https://www.youtube.com/watch?v=WUq6oUP684Y), or [browse the API docs](https://ara3d.github.io/ara3d-webgl/api).
 
 [![Ara 3D WebGL Viewer Demo](https://img.youtube.com/vi/WUq6oUP684Y/0.jpg)](https://www.youtube.com/watch?v=WUq6oUP684Y)
 
