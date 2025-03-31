@@ -3,6 +3,7 @@
 A WebGL viewer for AEC models built on [Three.JS](https://threejs.org) and forked from https://github.com/vimaec/vim-webgl-viewer.
 
 Try a live demo at: [https://ara3d.github.io/ara3d-webgl](https://ara3d.github.io/ara3d-webgl).
+The API docs are available at: [https://ara3d.github.io/ara3d-webgl/api](https://ara3d.github.io/ara3d-webgl/api).
 
 [![Ara 3D WebGL Viewer Demo](https://img.youtube.com/vi/WUq6oUP684Y/0.jpg)](https://www.youtube.com/watch?v=WUq6oUP684Y)
 
