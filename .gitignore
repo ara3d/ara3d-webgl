@@ -14,5 +14,3 @@ node_modules/*
 #ignore models
 models/*
 
-# This locks in development chain dependencies which is not appropriate. 
-package-lock.json
