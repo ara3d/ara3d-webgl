@@ -18,6 +18,14 @@ is easily extended, built on top [Parquet](https://parquet.apache.org/) format.
 A .BOS file is a ZIP archive that contains multiple Parquet files, which contain
 geometry, parameters, and other BIM data. 
 
+## Show me the code! 
+
+We've tried to keep the code as straightforward and legible as possible:
+
+- The Three.JS file loader: [`bimOpenSchemaLoader.ts`](https://github.com/ara3d/ara3d-webgl/blob/main/src/loader/bimOpenSchemaLoader.ts)
+- The BIM Geometry type definition: [`bimGeometry.ts`](https://github.com/ara3d/ara3d-webgl/blob/main/src/loader/bimGeometry.ts)
+- The conversion to Three.JS geometry: [`buildGeometryGroup.ts`](https://github.com/ara3d/ara3d-webgl/blob/main/src/loader/buildGeometryGroup.ts)
+
 ## Building and Running 
 
 The project uses [vite](https://vite.dev/) for bundling and development. 
