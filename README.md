@@ -51,11 +51,6 @@ Some of the common tasks, which can be found in the `package.json`.
 - `+` - Increase camera speed  
 - `-` - Decrease camera speed
 
-- `Space` - Toggle orbit mode  
-- `Home` - Frame model  
-- `Escape` - Clear selection  
-- `F` Frame selection
-
 ### Mouse
 
 - `Hold left click + Move mouse` - Rotate camera in current mode  
