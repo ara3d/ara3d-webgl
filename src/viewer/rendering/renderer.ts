@@ -33,7 +33,7 @@ export class Renderer
         alpha: true,
         stencil: false,
         powerPreference: 'high-performance',
-        logarithmicDepthBuffer: false,
+        logarithmicDepthBuffer: false
       }) 
       : new THREE.WebGLRenderer({
         canvas: viewport.canvas,
@@ -51,6 +51,9 @@ export class Renderer
       this.needsUpdate = true
     })
     this.background = settings.background.color
+
+    this.renderer.toneMapping = settings.rendering.toneMapping
+    this.renderer.toneMappingExposure = settings.rendering.toneMappingExposure
   }
 
   dispose () {
@@ -64,8 +67,15 @@ export class Renderer
     return this.scene.background
   }
 
-  set background (color: THREE.Color | THREE.Texture) {
+  set background (color: THREE.Color | THREE.Texture | null) {
     this.scene.background = color
+    if (color === null) {
+      // Set clear color to transparent when background is null
+      this.renderer.setClearColor(0x000000, 0)
+    } else {
+      // Reset to default clear behavior when background is set
+      this.renderer.setClearColor(0x000000, 1)
+    }
     this.needsUpdate = true
   }
 
