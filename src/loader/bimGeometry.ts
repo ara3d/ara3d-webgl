@@ -1,4 +1,4 @@
-export interface BimGeometry 
+export class BimGeometry 
 {
   //========================================
   // Instances table

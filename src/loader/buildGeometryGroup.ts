@@ -1,29 +1,32 @@
 import * as THREE from 'three';
 import { BimGeometry } from './bimGeometry';
-import { BimGeometryIR, buildGeometryIR } from './bimGeometryIR';
+import { BimGeometryIR, Instance } from './bimGeometryIR';
 
-type InstanceGroup = {
-  meshIndex: number;
-  materialIndex: number;
-  instanceIndices: number[];
-};
+type MaterialIndex = number;
+type MeshIndex = number;
+
+type GroupedInstances = 
+  Map<
+    MaterialIndex, 
+    Map<
+      MeshIndex, 
+      Array<Instance>>>;
+
+type InstanceMaterialGroup =
+{
+    materialIndex: MaterialIndex;
+    instances: Array<Instance>;
+}
 
 export function buildGeometry(ir: BimGeometryIR): THREE.Group 
 {
   console.time("Building geometry")
   const root = new THREE.Group();
  
-  const instanceGroups = groupInstances(ir.bim);
-  console.log("Created %d instance groups", instanceGroups.length)
-
+  const instanceGroups = groupInstances(ir);
   const materialGroups = gatherSingleInstancesByMaterial(instanceGroups);
-  console.log("Created %d material groups", Array.from(materialGroups.keys()).length);
-  
-  const instancedMeshes = createInstances(ir, instanceGroups);
-  console.log("Created %d instanced meshes", instancedMeshes.length);
-  
+  const instancedMeshes = createInstancedMeshes(ir, instanceGroups);
   const nonInstancedMeshes = createMergedAndSingleMeshes(ir, materialGroups); 
-  console.log("Create %d merged meshes", nonInstancedMeshes.length);
 
   let polyCount = 0;
   for (const im of instancedMeshes)
@@ -49,25 +52,25 @@ export function buildGeometry(ir: BimGeometryIR): THREE.Group
 
 export function createMergedAndSingleMeshes(
   ir: BimGeometryIR, 
-  materialGroups: Map<number, number[]>)
+  materialGroups: Array<InstanceMaterialGroup>)
   : Array<THREE.Mesh>
 {
   const identity = new THREE.Matrix4();
   const r: THREE.Mesh[] = [];
   
-  for (const [materialIndex, entries] of materialGroups) 
+  for (const materialGroup of materialGroups) 
   {
-    if (!entries || entries.length === 0) 
+    const n = materialGroup.instances.length; 
+    if (n === 0) 
       continue;
 
+    const materialIndex = materialGroup.materialIndex;
     const material = ir.materials[materialIndex];
 
-    if (entries.length === 1) {
-      const ii = entries[0];
-      const meshIndex = ir.bim.InstanceMeshIndex[ii];
-      const transformIndex = ir.bim.InstanceTransformIndex[ii];
-      const geom = ir.geometries[meshIndex];
-      const matrix = ir.transforms[transformIndex];
+    if (n === 1) {
+      const i = materialGroup.instances[0];
+      const geom = ir.geometries[i.meshIndex];
+      const matrix = ir.transforms[i.transformIndex];
       const mesh = new THREE.Mesh(geom, material);
       mesh.matrixAutoUpdate = false;
       mesh.matrix.copy(matrix); 
@@ -77,11 +80,9 @@ export function createMergedAndSingleMeshes(
 
     const geomsToMerge: THREE.BufferGeometry[] = [];
 
-    for (const ii of entries) {
-      const meshIndex = ir.bim.InstanceMeshIndex[ii];
-      const transformIndex = ir.bim.InstanceTransformIndex[ii];
-      const geom = ir.geometries[meshIndex];
-      const matrix = ir.transforms[transformIndex];
+    for (const i of materialGroup.instances) {
+      const geom = ir.geometries[i.meshIndex];
+      const matrix = ir.transforms[i.transformIndex];
       if (!matrix.equals(identity)) {
         geom.applyMatrix4(matrix);
       }
@@ -97,9 +98,8 @@ export function createMergedAndSingleMeshes(
   return r;
 }
 
-export function mergeGeometries(
-  geometries: Array<THREE.BufferGeometry>
-): THREE.BufferGeometry 
+export function mergeGeometries(geometries: Array<THREE.BufferGeometry>)
+  : THREE.BufferGeometry 
 {
   // First pass: count total vertices and indices
   let indexCount = 0;
@@ -157,78 +157,80 @@ export function mergeGeometries(
   return mergedGeom;
 }
 
-function groupInstances(bim: BimGeometry): Array<InstanceGroup>
-{
-  const instanceCount = bim.InstanceEntityIndex.length;
-  const instanceGroupMap = new Map<string, InstanceGroup>();
-  for (let ii = 0; ii < instanceCount; ii++) {
-    const meshIndex = bim.InstanceMeshIndex[ii];
-    const materialIndex = bim.InstanceMaterialIndex[ii];
-    const key = `${meshIndex}|${materialIndex}`;
-    let group = instanceGroupMap.get(key);
-    if (!group) {
-      group = { meshIndex, materialIndex, instanceIndices: [ii] };
-      instanceGroupMap.set(key, group);
+function groupInstances(ir: BimGeometryIR): GroupedInstances {
+  const groups: GroupedInstances = new Map();
+
+  for (const inst of ir.instances) {
+    if (inst.meshIndex < 0) continue;
+
+    let matGroup = groups.get(inst.materialIndex);
+    if (!matGroup) {
+      matGroup = new Map<MeshIndex, Array<Instance>>();
+      groups.set(inst.materialIndex, matGroup);
     }
-    else {
-      group.instanceIndices.push(ii);
+
+    let meshGroup = matGroup.get(inst.meshIndex);
+    if (!meshGroup) {
+      meshGroup = [];
+      matGroup.set(inst.meshIndex, meshGroup);
     }
+
+    meshGroup.push(inst);
   }
-  return Array.from(instanceGroupMap.values());
+
+  return groups;
 }
 
-export function gatherSingleInstancesByMaterial(instanceGroups: Array<InstanceGroup>)
-  : Map<number, number[]>
+export function gatherSingleInstancesByMaterial(groups: GroupedInstances)
+  : Array<InstanceMaterialGroup>
 {
-  const r = new Map<number, number[]>();
-  for (const group of instanceGroups) {
-    const { materialIndex, instanceIndices } = group;
-    if (instanceIndices.length === 1) {
-      const ei = instanceIndices[0];
-      let list = r.get(materialIndex);
-      if (!list) {
-        list = [];
-        r.set(materialIndex, list);
-      }
-      list.push(ei);
+  const r = new Array<InstanceMaterialGroup>();
+  for (const [materialIndex, meshGroups] of groups) 
+  {
+    let list = [];
+    for (const [, instances] of meshGroups) 
+    {
+      if (instances.length != 1) continue;
+      list.push(instances[0]);
     }
+    if (list.length < 1)
+        continue;
+    r.push({ materialIndex, instances: list });
   }
   return r;
 }
 
-
-export function createInstances(
-  ir: BimGeometryIR, 
-  instanceGroups: Array<InstanceGroup>
-)
+export function createInstancedMeshes(ir: BimGeometryIR,  instanceGroups: GroupedInstances)
     : Array<THREE.InstancedMesh>
 {
   const r = new Array<THREE.InstancedMesh>();
-  for (const group of instanceGroups) {
-    const { meshIndex, materialIndex, instanceIndices } = group;
-    const count = instanceIndices.length;
-   
-    if (count <= 1)
-      continue;
+  for (const [materialIndex, meshGroups] of instanceGroups) 
+  {
+    
+    for (const [meshIndex, instances] of meshGroups)
+    {
+      const count = instances.length;
+        
+      if (count <= 1)
+        continue;
 
-    const geom = ir.geometries[meshIndex];
-    const material = ir.materials[materialIndex];
- 
-    const instanced = new THREE.InstancedMesh(geom, material, count);
-    instanced.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+      const geom = ir.geometries[meshIndex];
+      const material = ir.materials[materialIndex];
+  
+      const instanced = new THREE.InstancedMesh(geom, material, count);
+      instanced.instanceMatrix.setUsage(THREE.StaticDrawUsage);
 
-    for (let i = 0; i < count; i++) {
-      const ei = instanceIndices[i];
-      const ti = ir.bim.InstanceTransformIndex[ei];
-      instanced.setMatrixAt(i, ir.transforms[ti]);
+      for (let i = 0; i < count; i++) {
+        instanced.setMatrixAt(i, ir.transforms[instances[i].transformIndex]);
+      }
+
+      (instanced.userData as any).meshIndex = meshIndex;
+      (instanced.userData as any).materialIndex = materialIndex;
+      instanced.frustumCulled = false;
+      instanced.matrixAutoUpdate = false;
+      instanced.matrixWorldNeedsUpdate = false;
+      r.push(instanced);
     }
-
-    (instanced.userData as any).meshIndex = meshIndex;
-    (instanced.userData as any).materialIndex = materialIndex;
-    instanced.frustumCulled = false;
-    instanced.matrixAutoUpdate = false;
-    instanced.matrixWorldNeedsUpdate = false;
-    r.push(instanced);
   }
   return r;
 }

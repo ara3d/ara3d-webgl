@@ -22,8 +22,9 @@
     const loader = new ARA3D.BimOpenSchemaLoader()
 
     console.time("Loading .bos file");
-    const group = await loader.load('/ara3d-webgl/snowdon.bos');
-    console.timeEnd("Loading .bos file");
+    const bimData = await loader.load('/ara3d-webgl/snowdon.bos');
+    const group = bimData.ThreeGeometry;
+    console.timeEnd("Loading .bos file");   
 
     console.time("Add object to viewer")
     viewer.add(group);

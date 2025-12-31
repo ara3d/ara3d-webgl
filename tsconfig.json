@@ -10,6 +10,7 @@
     "allowSyntheticDefaultImports": true,
   },
   "files": [
-    "src/index.ts"
+    "src/index.ts",
+    "src/loader/bimData.ts"
   ]
 }

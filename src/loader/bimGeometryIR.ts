@@ -7,24 +7,42 @@ export type BimGeometryIR =
     transforms: THREE.Matrix4[];
     geometries: THREE.BufferGeometry[];
     materials: THREE.Material[];
+    instances: Instance[];
+};
+
+export type Instance = 
+{
+    meshIndex: number;
+    materialIndex: number;
+    instanceIndex: number;
+    transformIndex: number;
+    entityIndex: number;
 };
 
 export function buildGeometryIR(bim: BimGeometry): BimGeometryIR
 {
-    const vertexCount = bim.VertexX.length;
-    const indexCount = bim.IndexBuffer.length;
-    const meshCount = bim.MeshVertexOffset.length;
-    const materialCount = bim.MaterialRed.length;
-    const instanceCount = bim.InstanceMeshIndex.length;
-    const transformCount = bim.TransformTX.length;
-
-    console.log({ vertexCount, indexCount, meshCount, materialCount, instanceCount, transformCount });
-
     const transforms = computeTransforms(bim);
     const geometries = computeMeshGeometries(bim);
     const materials = computeMaterials(bim);
+    const instances = computeInstances(bim);
+    return { bim, transforms, geometries, materials, instances };
+}
 
-    return { bim, transforms, geometries, materials };
+function computeInstances(bim: BimGeometry): Array<Instance>
+{
+    const instanceCount = bim.InstanceMeshIndex.length;
+    const instances = new Array<Instance>(instanceCount);
+    for (let i=0; i < instanceCount; i++)
+    {
+        instances[i] = {
+          meshIndex: bim.InstanceMeshIndex[i],
+          materialIndex: bim.InstanceMaterialIndex[i],
+          instanceIndex: i,
+          transformIndex: bim.InstanceTransformIndex[i],
+          entityIndex: bim.InstanceEntityIndex[i]
+         };
+    }
+    return instances;
 }
 
 function computeMeshGeometries(bim: BimGeometry): Array<THREE.BufferGeometry>
