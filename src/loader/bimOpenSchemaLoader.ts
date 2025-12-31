@@ -4,6 +4,7 @@ import { parquetRead, parquetMetadataAsync, parquetSchema, ColumnData, parquetRe
 import { compressors } from 'hyparquet-compressors';
 import { BimGeometry } from './bimGeometry';
 import { buildGeometry } from './buildGeometryGroup';
+import { BimGeometryIR, buildGeometryIR } from './bimGeometryIR';
 
 /**
  * Loader that takes a URL to a .ZIP or .BOS file containing BIM Open Schema geometry parquet tables:
@@ -19,7 +20,8 @@ export class BimOpenSchemaLoader
     const arrayBuffer = await response.arrayBuffer();
     const zip = await JSZip.loadAsync(arrayBuffer);
     const bim = await loadBimGeometryFromZip(zip);
-    return buildGeometry(bim);
+    const ir = buildGeometryIR(bim);
+    return buildGeometry(ir);
   }
 }
 
