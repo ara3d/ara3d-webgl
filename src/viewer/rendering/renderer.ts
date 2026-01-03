@@ -24,6 +24,7 @@ export class Renderer {
         // Higher performance trades quality for performance
         const highPerformance = false;
 
+<<<<<<< HEAD
         this.renderer = highPerformance
             ? new THREE.WebGLRenderer({
                   canvas: viewport.canvas,
@@ -50,6 +51,94 @@ export class Renderer {
             this.needsUpdate = true;
         });
         this.background = settings.background.color;
+=======
+    this.renderer = highPerformance 
+      ? new THREE.WebGLRenderer({
+        canvas: viewport.canvas,
+        antialias: false,
+        precision: 'lowp',
+        alpha: true,
+        stencil: false,
+        powerPreference: 'high-performance',
+        logarithmicDepthBuffer: false
+      }) 
+      : new THREE.WebGLRenderer({
+        canvas: viewport.canvas,
+        antialias: true,
+        precision: 'highp', 
+        alpha: true,
+        stencil: false,
+        powerPreference: 'high-performance',
+        logarithmicDepthBuffer: true
+      })
+
+    this.fitViewport()
+    this.viewport.onResize.subscribe(() => this.fitViewport())
+    this.camera.onValueChanged.sub(() => {
+      this.needsUpdate = true
+    })
+    this.background = settings.background.color
+
+    this.renderer.toneMapping = settings.rendering.toneMapping
+    this.renderer.toneMappingExposure = settings.rendering.toneMappingExposure
+  }
+
+  dispose () {
+    this.clear()
+    this.renderer.clear()
+    this.renderer.forceContextLoss()
+    this.renderer.dispose()
+  }
+
+  get background () {
+    return this.scene.background
+  }
+
+  set background (color: THREE.Color | THREE.Texture | null) {
+    this.scene.background = color
+    if (color === null) {
+      // Set clear color to transparent when background is null
+      this.renderer.setClearColor(0x000000, 0)
+    } else {
+      // Reset to default clear behavior when background is set
+      this.renderer.setClearColor(0x000000, 1)
+    }
+    this.needsUpdate = true
+  }
+
+  render ()
+  {
+    if (!this.needsUpdate && !this.camera.hasMoved) 
+      return  
+    this.renderer.render(this.scene, this.camera.camPerspective.camera);
+  }
+
+  add (target: THREE.Object3D)
+  {
+    this.scene.add(target)
+    this.needsUpdate = true
+    return true
+  }
+
+  remove (target: THREE.Object3D) {
+    this.scene.remove(target)
+    this.needsUpdate = true
+  }
+
+ clear () {
+    this.scene.clear()
+    this.needsUpdate = true
+  }
+
+  private _lastSize = new THREE.Vector2();
+
+  private fitViewport = () => {
+    const size = this.viewport.getParentSize()
+
+    // avoid thrashing if you get multiple resize events with the same values.
+    if (size.x === this._lastSize.x && size.y === this._lastSize.y) {
+      return
+>>>>>>> df4c77a8337a2e33fb8579b7c178e3b16938ff31
     }
 
     dispose() {

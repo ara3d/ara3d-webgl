@@ -21,6 +21,7 @@
     "dev": "vite --config vite.config.docs.js --host",
     "build:docs": "vite build --config vite.config.docs.js && npm run gentypes",
     "build:lib": "vite build --config vite.config.lib.js && npm run gentypes",
+    "dev:lib-watch": "vite build --config vite.config.lib.js --watch",
     "preview:docs": "vite preview --mode github --config vite.config.docs.js --host",
     "serve:docs": "http-server ./docs -o --host",
     "eslint": "eslint --ext .js,.ts src --fix",

@@ -1,14 +1,30 @@
 # Ara 3D WebGL - BIM Open Schema Viewer
 
+## [Live Demo](https://ara3d.github.io/ara3d-webgl/)
+
+<img
+  src="https://github.com/user-attachments/assets/99407018-c5d2-46b2-b602-7e4671c87860"
+  alt="BIM Open Schema Viewer"
+  width="200"
+  height="157"
+  align="right"
+/>
+
 A **WebGL viewer** for extremely large 3D models of buildings and infrastructure 
-represented as .BOS ([BIM Open Schema](https://github.com/ara3d/bim-open-schema)) files.
+represented as [BIM Open Schema .BOS files](https://github.com/ara3d/bim-open-schema).
 
 BIM Open Schema is an ultra-compressed and portable BIM data format, which 
 is easily extended, built on top [Parquet](https://parquet.apache.org/) format.
-
 A .BOS file is a ZIP archive that contains multiple Parquet files, which contain
 geometry, parameters, and other BIM data. 
 
+## Show me the code! 
+
+We've tried to keep the code as straightforward and legible as possible:
+
+- The Three.JS file loader: [`bimOpenSchemaLoader.ts`](https://github.com/ara3d/ara3d-webgl/blob/main/src/loader/bimOpenSchemaLoader.ts)
+- The BIM Geometry type definition: [`bimGeometry.ts`](https://github.com/ara3d/ara3d-webgl/blob/main/src/loader/bimGeometry.ts)
+- The conversion to Three.JS geometry: [`buildGeometryGroup.ts`](https://github.com/ara3d/ara3d-webgl/blob/main/src/loader/buildGeometryGroup.ts)
 
 ## Building and Running 
 
@@ -34,11 +50,6 @@ Some of the common tasks, which can be found in the `package.json`.
 - `Shift` - faster camera movement while pressed  
 - `+` - Increase camera speed  
 - `-` - Decrease camera speed
-
-- `Space` - Toggle orbit mode  
-- `Home` - Frame model  
-- `Escape` - Clear selection  
-- `F` Frame selection
 
 ### Mouse
 
