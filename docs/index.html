@@ -4,17 +4,18 @@
   <meta charset="UTF-8" />
   <title>Ara 3D WebGL Viewer Examples</title>
   
-  <script type="module" crossorigin src="/ara3d-webgl/assets/input.9fda8647.js"></script>
-  <link rel="modulepreload" crossorigin href="/ara3d-webgl/assets/compressors.f6880dca.js">
-  <link rel="modulepreload" crossorigin href="/ara3d-webgl/assets/gltfLoader.a307dfed.js">
-  <link rel="modulepreload" crossorigin href="/ara3d-webgl/assets/bimOpenSchemaLoader.8135e0a5.js">
+  <script type="module" crossorigin src="/ara3d-webgl/assets/input.06b6df02.js"></script>
+  <link rel="modulepreload" crossorigin href="/ara3d-webgl/assets/compressors.25b9b1d3.js">
+  <link rel="modulepreload" crossorigin href="/ara3d-webgl/assets/gltfLoader.50406622.js">
+  <link rel="modulepreload" crossorigin href="/ara3d-webgl/assets/bimOpenSchemaLoader.e5358af1.js">
   <link rel="stylesheet" href="/ara3d-webgl/assets/compressors.0c36277a.css">
 </head>
 <body>
 <div id="sidebar">
   <h1>Examples</h1>
   <ul id="exampleList">
-    <li><a href="./example-bos.html" target="exampleFrame">BIM Open Schema Example</a></li>
+    <li><a href="./example-bos.html" target="exampleFrame">BIM Open Schema (BOS) Example</a></li>
+    <li><a href="./example-bos-filters.html" target="exampleFrame">Filtered BOS Example</a></li>
     <li><a href="./example-geometry.html" target="exampleFrame">Geometry Example</a></li>
     <li><a href="./example-gltf-duck.html" target="exampleFrame">GLTF Duck Example</a></li>
   </ul>
@@ -44,7 +45,7 @@
   }
 
   // 1) Set the highlight for the default page (example-basic.html)
-  setActiveLink('example-basic.html');
+  setActiveLink('example-bos.html');
 
   // 2) Whenever the iframe finishes loading a page,
   //    compare the loaded page’s filename with the sidebar links
