@@ -28,8 +28,6 @@ export function buildGeometry(instances: Instance[]): THREE.Group {
         root.add(nim);
     }
 
-    console.log('Total polygon count = %d', polyCount);
-
     // Convert Z-Up to Y-Up
     root.rotation.x = -Math.PI / 2;
 

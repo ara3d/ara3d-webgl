@@ -9,26 +9,25 @@
  *   showFilter(string name, filter: Map<value, number[]>, onChange: Function)
  *
  * onChange is called as:
- *   onChange(selectedKeysArray, filter)
- *  where filter is the original filter.
+ *   onChange(selectedKeysArray, stateMap, keyToValueMap)
  */
 export function showFilter(name, filter, onChange) {
-    // Hide if called with no args (or falsy name/filter)
-    if (!name || !filter) {
-        const existing = document.getElementById('ara3d-filter-panel');
-        if (existing) existing.style.display = 'none';
-        return;
-    }
+  // Hide if called with no args (or falsy name/filter)
+  if (!name || !filter) {
+    const existing = document.getElementById("ara3d-filter-panel");
+    if (existing) existing.style.display = "none";
+    return;
+  }
 
-    // ---------- helpers ----------
-    const panelId = 'ara3d-filter-panel';
-    const styleId = 'ara3d-filter-panel-style';
+  // ---------- helpers ----------
+  const panelId = "ara3d-filter-panel";
+  const styleId = "ara3d-filter-panel-style";
 
-    function ensureStyles() {
-        if (document.getElementById(styleId)) return;
-        const style = document.createElement('style');
-        style.id = styleId;
-        style.textContent = `
+  function ensureStyles() {
+    if (document.getElementById(styleId)) return;
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
       #${panelId}{
         position: fixed;
         top: 0;
@@ -163,148 +162,163 @@ export function showFilter(name, filter, onChange) {
         opacity: 0.7;
         user-select: none;
       }
-      #${panelId} .ara3d-badge{
-        display: inline-block;
-        padding: 1px 6px;
-        border-radius: 999px;
-        border: 1px solid rgba(255,255,255,0.15);
-        background: rgba(255,255,255,0.06);
-        margin-left: 6px;
-        font-size: 10px;
-        opacity: 0.9;
-      }
     `;
-        document.head.appendChild(style);
-    }
+    document.head.appendChild(style);
+  }
 
-    function ensurePanel() {
-        let panel = document.getElementById(panelId);
-        if (panel) return panel;
+  function ensurePanel() {
+    let panel = document.getElementById(panelId);
+    if (panel) return panel;
 
-        panel = document.createElement('div');
-        panel.id = panelId;
+    panel = document.createElement("div");
+    panel.id = panelId;
 
-        // Resize handle
-        const handle = document.createElement('div');
-        handle.className = 'ara3d-resize-handle';
-        panel.appendChild(handle);
+    // Prevent viewer hotkeys (WASD etc.) when interacting with the panel/search.
+    // Use capture so we beat most window-level handlers.
+    const stopIfPanelFocused = (ev) => {
+      const t = ev.target;
+      const isTextInput =
+        t instanceof HTMLInputElement ||
+        t instanceof HTMLTextAreaElement ||
+        t instanceof HTMLSelectElement ||
+        (t && t.isContentEditable);
 
-        // Header
-        const header = document.createElement('div');
-        header.className = 'ara3d-header';
-        header.innerHTML = `
+      // If the event originated inside the panel, don't let it bubble to the viewer.
+      // If it's a typing context, also prevent default so nothing else consumes it.
+      if (panel.contains(t)) {
+        ev.stopPropagation();
+        if (isTextInput) ev.stopImmediatePropagation?.();
+      }
+    };
+
+    panel.addEventListener("keydown", stopIfPanelFocused, true);
+    panel.addEventListener("keyup", stopIfPanelFocused, true);
+    panel.addEventListener("keypress", stopIfPanelFocused, true);
+
+    // Resize handle
+    const handle = document.createElement("div");
+    handle.className = "ara3d-resize-handle";
+    panel.appendChild(handle);
+
+    // Header
+    const header = document.createElement("div");
+    header.className = "ara3d-header";
+    header.innerHTML = `
       <div class="ara3d-title"></div>
       <button class="ara3d-close" title="Close">×</button>
     `;
-        panel.appendChild(header);
+    panel.appendChild(header);
 
-        // Controls
-        const controls = document.createElement('div');
-        controls.className = 'ara3d-controls';
-        controls.innerHTML = `
+    // Controls (Isolate removed)
+    const controls = document.createElement("div");
+    controls.className = "ara3d-controls";
+    controls.innerHTML = `
       <button class="ara3d-btn" data-act="all-on">All On</button>
       <button class="ara3d-btn" data-act="all-off">All Off</button>
       <button class="ara3d-btn" data-act="invert">Invert</button>
-      <button class="ara3d-btn" data-act="isolate" title="Isolate the currently focused/checked item">Isolate</button>
     `;
-        panel.appendChild(controls);
+    panel.appendChild(controls);
 
-        // Search
-        const search = document.createElement('div');
-        search.className = 'ara3d-search';
-        search.innerHTML = `<input type="text" placeholder="Search…" />`;
-        panel.appendChild(search);
+    // Search
+    const search = document.createElement("div");
+    search.className = "ara3d-search";
+    search.innerHTML = `<input type="text" placeholder="Search…" />`;
+    panel.appendChild(search);
 
-        // List
-        const list = document.createElement('div');
-        list.className = 'ara3d-list';
-        panel.appendChild(list);
+    // List
+    const list = document.createElement("div");
+    list.className = "ara3d-list";
+    panel.appendChild(list);
 
-        // Footer hint
-        const footer = document.createElement('div');
-        footer.className = 'ara3d-footerhint';
-        footer.innerHTML = `
-      Tip: <span class="ara3d-badge">Alt</span>+Click to isolate an item.
-      <span class="ara3d-badge">Ctrl</span>+Click to invert an item.
-    `;
-        panel.appendChild(footer);
+    // Footer hint (remove Alt/Ctrl text)
+    const footer = document.createElement("div");
+    footer.className = "ara3d-footerhint";
+    footer.textContent = "Tip: Use Search to quickly find items.";
+    panel.appendChild(footer);
 
-        document.body.appendChild(panel);
+    document.body.appendChild(panel);
 
-        // Close behavior
-        header.querySelector('.ara3d-close').addEventListener('click', () => {
-            panel.style.display = 'none';
-        });
+    // Close behavior
+    header.querySelector(".ara3d-close").addEventListener("click", () => {
+      panel.style.display = "none";
+    });
 
-        // Resizing behavior
-        let resizing = false;
-        let startX = 0;
-        let startWidth = 0;
+    // Ensure clicking anywhere in the search area focuses input,
+    // and prevent mousedown from stealing focus back to the canvas.
+    const searchInput = search.querySelector("input");
+    search.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+      // Prevent the viewer from treating this as a drag/click on the canvas.
+      e.preventDefault();
+      searchInput.focus();
+    });
 
-        handle.addEventListener('mousedown', (e) => {
-            resizing = true;
-            startX = e.clientX;
-            startWidth = panel.getBoundingClientRect().width;
-            e.preventDefault();
-        });
+    // Resizing behavior
+    let resizing = false;
+    let startX = 0;
+    let startWidth = 0;
 
-        window.addEventListener('mousemove', (e) => {
-            if (!resizing) return;
-            const dx = startX - e.clientX; // moving left increases width
-            const newW = Math.max(
-                220,
-                Math.min(window.innerWidth * 0.6, startWidth + dx)
-            );
-            panel.style.width = `${newW}px`;
-        });
+    handle.addEventListener("mousedown", (e) => {
+      resizing = true;
+      startX = e.clientX;
+      startWidth = panel.getBoundingClientRect().width;
+      e.preventDefault();
+      e.stopPropagation();
+    });
 
-        window.addEventListener('mouseup', () => {
-            resizing = false;
-        });
+    window.addEventListener("mousemove", (e) => {
+      if (!resizing) return;
+      const dx = startX - e.clientX; // moving left increases width
+      const newW = Math.max(220, Math.min(window.innerWidth * 0.6, startWidth + dx));
+      panel.style.width = `${newW}px`;
+    });
 
-        return panel;
-    }
+    window.addEventListener("mouseup", () => {
+      resizing = false;
+    });
 
-    function stableKey(v) {
-        // Normalize keys for Maps that might use numbers/strings/etc.
-        return typeof v === 'string' ? v : String(v);
-    }
+    return panel;
+  }
 
-    // ---------- build UI ----------
-    ensureStyles();
-    const panel = ensurePanel();
-    panel.style.display = 'flex';
+  function stableKey(v) {
+    return typeof v === "string" ? v : String(v);
+  }
 
-    const titleEl = panel.querySelector('.ara3d-title');
-    const listEl = panel.querySelector('.ara3d-list');
-    const searchInput = panel.querySelector('.ara3d-search input');
+  // ---------- build UI ----------
+  ensureStyles();
+  const panel = ensurePanel();
+  panel.style.display = "flex";
 
-    titleEl.textContent = name;
+  const titleEl = panel.querySelector(".ara3d-title");
+  const listEl = panel.querySelector(".ara3d-list");
+  const searchInput = panel.querySelector(".ara3d-search input");
 
-    // Sort values by count desc, then name asc (nice default)
-    const entries = Array.from(filter.entries()).map(([value, indices]) => ({
-        value,
-        key: stableKey(value),
-        count: Array.isArray(indices) ? indices.length : 0,
-    }));
-    entries.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+  titleEl.textContent = name;
 
-    // State: Map<key, boolean>
-    const state = new Map(entries.map((e) => [e.key, true]));
-    // Also keep original value objects by key (for callbacks)
-    const keyToValue = new Map(entries.map((e) => [e.key, e.value]));
+  // Sort alphabetically by key (case-insensitive, numeric-aware)
+  const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 
-    // Render list
-    function renderList(filterText = '') {
-        const ft = filterText.trim().toLowerCase();
-        listEl.innerHTML = '';
+  const entries = Array.from(filter.entries()).map(([value, indices]) => ({
+    value,
+    key: stableKey(value),
+    count: Array.isArray(indices) ? indices.length : 0,
+  }));
+  entries.sort((a, b) => collator.compare(a.key, b.key));
 
-        for (const e of entries) {
-            if (ft && !e.key.toLowerCase().includes(ft)) continue;
+  // State: Map<key, boolean>
+  const state = new Map(entries.map((e) => [e.key, true]));
+  const keyToValue = new Map(entries.map((e) => [e.key, e.value]));
 
-            const row = document.createElement('div');
-            row.className = 'ara3d-item';
-            row.innerHTML = `
+  function renderList(filterText = "") {
+    const ft = filterText.trim().toLowerCase();
+    listEl.innerHTML = "";
+
+    for (const e of entries) {
+      if (ft && !e.key.toLowerCase().includes(ft)) continue;
+
+      const row = document.createElement("div");
+      row.className = "ara3d-item";
+      row.innerHTML = `
         <label title="${e.key}">
           <input type="checkbox" />
           <span class="ara3d-value"></span>
@@ -312,103 +326,71 @@ export function showFilter(name, filter, onChange) {
         </label>
       `;
 
-            const cb = row.querySelector('input');
-            const valueEl = row.querySelector('.ara3d-value');
+      const cb = row.querySelector("input");
+      const valueEl = row.querySelector(".ara3d-value");
 
-            cb.checked = state.get(e.key) === true;
-            cb.dataset.key = e.key;
+      cb.checked = state.get(e.key) === true;
+      cb.dataset.key = e.key;
+      valueEl.textContent = e.key;
 
-            valueEl.textContent = e.key;
+      // Simple toggle only (no Alt isolate, no Ctrl invert-single)
+      cb.addEventListener("click", (ev) => {
+        ev.stopPropagation(); // avoid viewer click handlers
+        state.set(cb.dataset.key, cb.checked);
+        notify();
+      });
 
-            // Click modifiers:
-            // - Alt+Click: isolate this item (only it ON)
-            // - Ctrl/Cmd+Click: invert only this item
-            cb.addEventListener('click', (ev) => {
-                const k = cb.dataset.key;
-
-                if (ev.altKey) {
-                    // isolate
-                    for (const kk of state.keys()) state.set(kk, kk === k);
-                    renderList(searchInput.value);
-                    notify();
-                    ev.preventDefault();
-                    return;
-                }
-
-                if (ev.ctrlKey || ev.metaKey) {
-                    // invert single
-                    state.set(k, !state.get(k));
-                    cb.checked = state.get(k) === true;
-                    notify();
-                    ev.preventDefault();
-                    return;
-                }
-
-                // normal toggle (already updated by browser)
-                state.set(k, cb.checked);
-                notify();
-            });
-
-            listEl.appendChild(row);
-        }
+      listEl.appendChild(row);
     }
+  }
 
-    function getSelectedKeys() {
-        const out = [];
-        for (const [k, v] of state.entries()) if (v) out.push(k);
-        return out;
+  function getSelectedKeys() {
+    const out = [];
+    for (const [k, v] of state.entries()) if (v) out.push(k);
+    return out;
+  }
+
+  function notify() {
+    if (typeof onChange !== "function") return;
+    onChange(getSelectedKeys(), new Map(state), keyToValue);
+  }
+
+  // Controls actions
+  panel.querySelector(".ara3d-controls").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+
+    const act = btn.dataset.act;
+
+    if (act === "all-on") {
+      for (const k of state.keys()) state.set(k, true);
+      renderList(searchInput.value);
+      notify();
+    } else if (act === "all-off") {
+      for (const k of state.keys()) state.set(k, false);
+      renderList(searchInput.value);
+      notify();
+    } else if (act === "invert") {
+      for (const [k, v] of state.entries()) state.set(k, !v);
+      renderList(searchInput.value);
+      notify();
     }
+  });
 
-    function notify() {
-        if (typeof onChange !== 'function') return;
+  // Search filter
+  searchInput.addEventListener("input", () => renderList(searchInput.value));
+  // Also stop key events from escaping the input specifically
+  ["keydown", "keyup", "keypress"].forEach((t) =>
+    searchInput.addEventListener(
+      t,
+      (e) => {
+        e.stopPropagation();
+      },
+      true
+    )
+  );
 
-        // Provide both a list of selected keys and the full boolean map
-        // (and values are retrievable via keyToValue if you need)
-        onChange(getSelectedKeys(), new Map(state), keyToValue);
-    }
-
-    // Controls actions
-    panel.querySelector('.ara3d-controls').addEventListener('click', (e) => {
-        const btn = e.target.closest('button[data-act]');
-        if (!btn) return;
-
-        const act = btn.dataset.act;
-
-        if (act === 'all-on') {
-            for (const k of state.keys()) state.set(k, true);
-            renderList(searchInput.value);
-            notify();
-        } else if (act === 'all-off') {
-            for (const k of state.keys()) state.set(k, false);
-            renderList(searchInput.value);
-            notify();
-        } else if (act === 'invert') {
-            for (const [k, v] of state.entries()) state.set(k, !v);
-            renderList(searchInput.value);
-            notify();
-        } else if (act === 'isolate') {
-            // Mechanism: isolate the "focused" checkbox if any, otherwise isolate first checked.
-            const activeCb = panel.querySelector(
-                ".ara3d-list input[type='checkbox']:focus"
-            );
-            let key = activeCb?.dataset?.key;
-
-            if (!key) {
-                // fall back: first checked in current state
-                key = getSelectedKeys()[0] || (entries[0] && entries[0].key);
-            }
-            if (!key) return;
-
-            for (const k of state.keys()) state.set(k, k === key);
-            renderList(searchInput.value);
-            notify();
-        }
-    });
-
-    // Search filter
-    searchInput.oninput = () => renderList(searchInput.value);
-
-    // Initial render + initial notify
-    renderList('');
-    notify();
+  // Initial render + initial notify
+  renderList("");
+  notify();
 }

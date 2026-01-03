@@ -13,14 +13,9 @@ export default defineConfig({
         rollupOptions: {
             input: {
                 input: resolve(__dirname, 'examples/index.html'),
-                exampleGeometry: resolve(
-                    __dirname,
-                    'examples/example-geometry.html'
-                ),
-                exampleGltf: resolve(
-                    __dirname,
-                    'examples/example-gltf-duck.html'
-                ),
+                exampleGeometry: resolve(__dirname, 'examples/example-geometry.html'),
+                exampleGltf: resolve(__dirname, 'examples/example-gltf-duck.html'),
+                exampleBosFilters: resolve(__dirname, 'examples/example-bos-filters.html'),
                 exampleBos: resolve(__dirname, 'examples/example-bos.html'),
             },
         },
