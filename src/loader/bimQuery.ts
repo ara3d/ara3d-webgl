@@ -26,4 +26,9 @@ export class BimQuery {
         return this.FuncToInstances(
             i => this.Resolver.GetInstanceCategoryName(i));
     }
+
+    GlobalIdToInstances(): Map<string, Instance[]> {
+        return this.FuncToInstances(
+            i => this.Resolver.GetInstanceGlobalId(i));
+    }
 }

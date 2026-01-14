@@ -59,11 +59,9 @@ export function createMergedAndSingleMeshes(materialGroups: Array<InstanceMateri
         const geomsToMerge: THREE.BufferGeometry[] = [];
 
         for (const i of materialGroup.instances) {
-            const geom = i.geometry;
-            if (!i.isIdentity) {
-                geom.applyMatrix4(i.transform);
-                i.isIdentity = true;
-            }
+            // IMPORTANT: i.geometry is shared across instances/rebuilds, so never mutate it.
+            // Clone before applying transforms to avoid corrupting the original geometry.
+            const geom = i.isIdentity ? i.geometry : i.geometry.clone().applyMatrix4(i.transform);
             geomsToMerge.push(geom);
         }
 

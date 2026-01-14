@@ -35,6 +35,7 @@ export class BimResolver {
     GetInstanceCategoryName(i: Instance): string { return this.GetEntityCategoryName(i.entity); }
     GetInstanceTypeName(i: Instance): string { return this.GetEntityTypeName(i.entity); }
     GetInstanceDocumentName(i: Instance): string { return this.GetEntityDocumentName(i.entity); }
+    GetInstanceGlobalId(i: Instance): string { return this.GetString(this.Entities.GlobalId[i.entity]); }
 
     *EntityIndices(): Iterable<EntityIndex> { for (let i = 0; i < this.EntityCount; i++) yield i as EntityIndex; }
 }
