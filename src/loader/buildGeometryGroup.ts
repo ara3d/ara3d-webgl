@@ -52,24 +52,39 @@ export function createMergedAndSingleMeshes(materialGroups: Array<InstanceMateri
             const mesh = new THREE.Mesh(i.geometry, i.material);
             mesh.matrixAutoUpdate = false;
             mesh.matrix.copy(i.transform);
+            // Attach pick metadata for single mesh
+            mesh.userData.pick = {
+                kind: 'single',
+                instanceIndex: i.instance
+            };
             r.push(mesh);
             continue;
         }
 
         const geomsToMerge: THREE.BufferGeometry[] = [];
+        const instanceIndices: number[] = [];
 
         for (const i of materialGroup.instances) {
-            const geom = i.geometry;
-            if (!i.isIdentity) {
-                geom.applyMatrix4(i.transform);
-                i.isIdentity = true;
-            }
+            // IMPORTANT: i.geometry is shared across instances/rebuilds, so never mutate it.
+            // Clone before applying transforms to avoid corrupting the original geometry.
+            const geom = i.isIdentity ? i.geometry : i.geometry.clone().applyMatrix4(i.transform);
             geomsToMerge.push(geom);
+            instanceIndices.push(i.instance);
         }
 
-        const mergedGeometry = mergeGeometries(geomsToMerge);
+        const { geometry: mergedGeometry, triToInstanceIndex } = mergeGeometries(geomsToMerge);
         const mergedMesh = new THREE.Mesh(mergedGeometry, material);
         mergedMesh.name = `MergedStatic_Material_${material.Id}`;
+        // Attach pick metadata for merged mesh
+        // Map triangle index to instance index, then use instanceIndices array to get actual InstanceIndex
+        const triToInstanceIndexMap = new Uint32Array(triToInstanceIndex.length);
+        for (let i = 0; i < triToInstanceIndex.length; i++) {
+            triToInstanceIndexMap[i] = instanceIndices[triToInstanceIndex[i]];
+        }
+        mergedMesh.userData.pick = {
+            kind: 'merged',
+            triToInstanceIndex: triToInstanceIndexMap
+        };
         r.push(mergedMesh);
     }
 
@@ -77,7 +92,7 @@ export function createMergedAndSingleMeshes(materialGroups: Array<InstanceMateri
 }
 
 export function mergeGeometries(geometries: Array<THREE.BufferGeometry>)
-    : THREE.BufferGeometry 
+    : { geometry: THREE.BufferGeometry; triToInstanceIndex: Uint32Array }
 {
     let indexCount = 0;
     let posCount = 0;
@@ -94,11 +109,13 @@ export function mergeGeometries(geometries: Array<THREE.BufferGeometry>)
     // Allocated data structures
     const mergedPositions = new Float32Array(posCount * 3);
     const mergedIndices = new Uint32Array(indexCount);
+    // Map triangle index (faceIndex) to instance index
+    const triToInstanceIndex = new Uint32Array(indexCount / 3);
 
     let indexOffset = 0;
     let vertexOffset = 0;
 
-    // Second pass: copy data
+    // Second pass: copy data and build triangle-to-instance mapping
     for (let i = 0, l = geometries.length; i < l; i++) {
         const geometry = geometries[i];
 
@@ -111,6 +128,7 @@ export function mergeGeometries(geometries: Array<THREE.BufferGeometry>)
         const vertCount = posAttr.count;
         const idxCount = indexAttr.count;
         const posItemSize = posAttr.itemSize; 
+        const triCount = idxCount / 3;
 
         const srcPosLength = vertCount * posItemSize;
         const dstPosOffset = vertexOffset * posItemSize;
@@ -122,6 +140,12 @@ export function mergeGeometries(geometries: Array<THREE.BufferGeometry>)
         for (let j = 0; j < idxCount; j++) 
             mergedIndices[indexOffset + j] = srcIndexArray[j] + vertexOffset;
 
+        // Map each triangle in this instance to its instance index
+        const triStart = indexOffset / 3;
+        for (let triIdx = 0; triIdx < triCount; triIdx++) {
+            triToInstanceIndex[triStart + triIdx] = i;
+        }
+
         vertexOffset += vertCount;
         indexOffset += idxCount;
     }
@@ -130,7 +154,7 @@ export function mergeGeometries(geometries: Array<THREE.BufferGeometry>)
     const mergedGeom = new THREE.BufferGeometry();
     mergedGeom.setAttribute('position', new THREE.BufferAttribute(mergedPositions, 3));
     mergedGeom.setIndex(new THREE.BufferAttribute(mergedIndices, 1));
-    return mergedGeom;
+    return { geometry: mergedGeom, triToInstanceIndex };
 }
 
 function groupInstances(instances: Instance[]): GroupedInstances {
@@ -187,12 +211,21 @@ export function createInstancedMeshes(instanceGroups: GroupedInstances)
             const instanced = new THREE.InstancedMesh(geometry, material, count);
             instanced.instanceMatrix.setUsage(THREE.StaticDrawUsage);
 
-            for (let i = 0; i < count; i++) 
+            // Build instanceId -> InstanceIndex mapping for pick metadata
+            const instanceIndices = new Uint32Array(count);
+            for (let i = 0; i < count; i++) {
                 instanced.setMatrixAt(i, instances[i].transform);
+                instanceIndices[i] = instances[i].instance;
+            }
 
             instanced.frustumCulled = false;
             instanced.matrixAutoUpdate = false;
             instanced.matrixWorldNeedsUpdate = false;
+            // Attach pick metadata for instanced mesh
+            instanced.userData.pick = {
+                kind: 'instanced',
+                instanceIndices: instanceIndices
+            };
             r.push(instanced);
         }
     }
