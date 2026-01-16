@@ -23,6 +23,9 @@ jobs:
                   node-version: '20'
                   registry-url: 'https://registry.npmjs.org'
 
+            - name: Upgrade npm (required 11.5.1+ for OIDC)
+              run: npm install -g npm@latest
+
             - name: Install dependencies
               run: npm ci
 
