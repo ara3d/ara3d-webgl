@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Viewport Selection Example</title>
+  <link rel="stylesheet" href="./style.css" />
+  <style>
+    /* Selection panel styles */
+    #selection-panel {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      width: 300px;
+      max-height: 400px;
+      background: rgba(20, 20, 22, 0.92);
+      color: #f2f2f2;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-size: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+      z-index: 1000;
+      overflow-y: auto;
+    }
+    #selection-panel h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    #selection-panel .info {
+      margin-bottom: 10px;
+      opacity: 0.8;
+    }
+    #selection-panel .controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    #selection-panel button {
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.9);
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    #selection-panel button:hover {
+      background: rgba(255, 255, 255, 0.10);
+    }
+    #selection-panel .selected-list {
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 10px;
+    }
+    #selection-panel .selected-item {
+      padding: 4px 6px;
+      margin: 2px 0;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 11px;
+      word-break: break-all;
+    }
+    #selection-panel .hint {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 11px;
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <script type="module">
+import * as ARA3D from '../src/index';
+import * as THREE from 'three';
+
+async function runExample() {
+    // Initialize viewer
+    const viewer = new ARA3D.Viewer();
+    const loader = new ARA3D.BimOpenSchemaLoader();
+    
+    console.time('Loading .bos file');
+    const bimData = await loader.load('/ara3d-webgl/rac_basic_sample_project-2025.bos');
+    console.timeEnd('Loading .bos file');
+
+    let group = bimData.ThreeGeometry;
+    const originalGroup = bimData.ThreeGeometry; // Store reference to original geometry
+    viewer.add(group);
+
+    // Selection state
+    const selectedGlobalIds = new Set();
+    let pointerDownPos = null;
+    const DRAG_THRESHOLD = 5; // pixels
+    const raycaster = new THREE.Raycaster();
+
+    // Ghost material for non-selected instances
+    const ghostMaterial = new THREE.MeshStandardMaterial({
+        color: 0x88aaff,
+        transparent: true,
+        opacity: 0.1,
+        roughness: 0.8,
+        metalness: 0.0,
+        depthWrite: false,
+    });
+
+    // Decode raycast hit to InstanceIndex using pick metadata
+    function decodeHitToInstanceIndex(object, intersection) {
+        const pickData = object.userData.pick;
+        if (!pickData) return null;
+
+        if (pickData.kind === 'single') {
+            return pickData.instanceIndex;
+        } else if (pickData.kind === 'instanced') {
+            // intersection.instanceId is the index into the InstancedMesh
+            if (intersection.instanceId !== undefined && pickData.instanceIndices) {
+                return pickData.instanceIndices[intersection.instanceId];
+            }
+            return null;
+        } else if (pickData.kind === 'merged') {
+            // intersection.faceIndex is the triangle index
+            if (intersection.faceIndex !== undefined && pickData.triToInstanceIndex) {
+                return pickData.triToInstanceIndex[intersection.faceIndex];
+            }
+            return null;
+        }
+
+        return null;
+    }
+
+    // Update geometry based on selection
+    function rebuildGeometryWithSelection() {
+        const instances = [];
+        
+        for (const instance of bimData.Instances) {
+            const globalId = bimData.Resolver.GetInstanceGlobalId(instance);
+            if (selectedGlobalIds.has(globalId)) {
+                // Selected: keep original material
+                instances.push(instance);
+            } else {
+                // Non-selected: apply ghost material
+                instances.push({ ...instance, material: ghostMaterial });
+            }
+        }
+
+        const newGroup = bimData.rebuildGeometry(instances);
+        viewer.remove(group);
+        group = newGroup;
+        viewer.add(group);
+        
+        // Update UI
+        updateSelectionPanel();
+    }
+
+    // Reset to initial state - restore original geometry
+    function resetSelection() {
+        selectedGlobalIds.clear();
+        viewer.remove(group);
+        group = originalGroup;
+        viewer.add(group);
+        updateSelectionPanel();
+    }
+
+    // Handle pointer events for picking
+    function handlePointerDown(event) {
+        if (event.button !== 0) return; // Only handle left mouse button
+        pointerDownPos = { x: event.clientX, y: event.clientY };
+    }
+
+    function handlePointerUp(event) {
+        if (event.button !== 0) return; // Only handle left mouse button
+        if (!pointerDownPos) return;
+
+        // Check if this was a drag (not a click)
+        const dx = event.clientX - pointerDownPos.x;
+        const dy = event.clientY - pointerDownPos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance > DRAG_THRESHOLD) {
+            pointerDownPos = null;
+            return; // This was a drag, ignore
+        }
+
+        pointerDownPos = null;
+
+        // Get canvas and camera
+        const canvas = viewer.viewport.canvas;
+        const camera = viewer.camera.three;
+
+        // Convert mouse coordinates to normalized device coordinates
+        const rect = canvas.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        // Raycast
+        raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+        const intersects = raycaster.intersectObject(group, true);
+
+        if (intersects.length === 0) {
+            // Background click - reset to initial state
+            if (!event.ctrlKey && !event.shiftKey) {
+                resetSelection();
+            }
+            return;
+        }
+
+        // Object click - find the first valid hit
+        for (const intersection of intersects) {
+            const instanceIndex = decodeHitToInstanceIndex(intersection.object, intersection);
+            if (instanceIndex !== null && instanceIndex !== undefined) {
+                const instance = bimData.Instances[instanceIndex];
+                if (instance) {
+                    const globalId = bimData.Resolver.GetInstanceGlobalId(instance);
+                    
+                    // Determine selection mode based on modifier keys
+                    let mode = 'replace';
+                    if (event.ctrlKey || event.metaKey) {
+                        mode = 'toggle';
+                    } else if (event.shiftKey) {
+                        mode = 'add';
+                    }
+
+                    // Update selection based on mode
+                    if (mode === 'toggle') {
+                        if (selectedGlobalIds.has(globalId)) {
+                            selectedGlobalIds.delete(globalId);
+                        } else {
+                            selectedGlobalIds.add(globalId);
+                        }
+                    } else if (mode === 'add') {
+                        selectedGlobalIds.add(globalId);
+                    } else {
+                        // replace mode
+                        selectedGlobalIds.clear();
+                        selectedGlobalIds.add(globalId);
+                    }
+
+                    rebuildGeometryWithSelection();
+                    console.log(`Selected instance ${instanceIndex}, GlobalId: ${globalId}, Mode: ${mode}`);
+                    return;
+                }
+            }
+        }
+
+        // If we couldn't decode any hit, treat as background click
+        if (!event.ctrlKey && !event.shiftKey) {
+            resetSelection();
+        }
+    }
+
+    // Create selection panel UI
+    function createSelectionPanel() {
+        const panel = document.createElement('div');
+        panel.id = 'selection-panel';
+        panel.innerHTML = `
+            <h3>Selection</h3>
+            <div class="info">
+                <div>Selected: <span id="selection-count">0</span></div>
+            </div>
+            <div class="controls">
+                <button id="reset-selection">Reset</button>
+            </div>
+            <div class="selected-list" id="selected-list"></div>
+            <div class="hint">
+                <div>Click: Replace selection</div>
+                <div>Ctrl+Click: Toggle selection</div>
+                <div>Shift+Click: Add to selection</div>
+            </div>
+        `;
+        document.body.appendChild(panel);
+
+        // Reset selection button
+        document.getElementById('reset-selection').addEventListener('click', () => {
+            resetSelection();
+        });
+    }
+
+    // Update selection panel display
+    function updateSelectionPanel() {
+        const countEl = document.getElementById('selection-count');
+        const listEl = document.getElementById('selected-list');
+        
+        if (countEl) {
+            countEl.textContent = selectedGlobalIds.size;
+        }
+        
+        if (listEl) {
+            if (selectedGlobalIds.size === 0) {
+                listEl.innerHTML = '<div style="opacity: 0.5; padding: 8px;">No items selected</div>';
+            } else {
+                const items = Array.from(selectedGlobalIds).slice(0, 50); // Limit to first 50 for performance
+                listEl.innerHTML = items.map(id => 
+                    `<div class="selected-item">${id}</div>`
+                ).join('');
+                if (selectedGlobalIds.size > 50) {
+                    listEl.innerHTML += `<div style="opacity: 0.5; padding: 4px; font-size: 10px;">... and ${selectedGlobalIds.size - 50} more</div>`;
+                }
+            }
+        }
+    }
+
+    // Register pointer handlers
+    const canvas = viewer.viewport.canvas;
+    canvas.addEventListener('pointerdown', handlePointerDown);
+    canvas.addEventListener('pointerup', handlePointerUp);
+
+    // Create UI panel
+    createSelectionPanel();
+    updateSelectionPanel();
+
+    console.log('Viewport selection example ready. Click on objects to select them.');
+}
+
+runExample();
+  </script> 
+</body>
+</html>

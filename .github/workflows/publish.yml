@@ -1,0 +1,33 @@
+name: Publish Package
+
+on:
+    workflow_dispatch: # Manual trigger
+    push:
+        tags:
+            - 'v*' # Also trigger on version tags (optional)
+
+permissions:
+    id-token: write # Required for OIDC
+    contents: read
+
+jobs:
+    publish:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '20'
+                  registry-url: 'https://registry.npmjs.org'
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build package
+              run: npm run build:lib
+
+            - name: Publish to npm
+              run: npm publish

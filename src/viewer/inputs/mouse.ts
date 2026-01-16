@@ -207,7 +207,7 @@ export class MouseHandler extends InputHandler {
             this.camera.speed -= scrollValue;
         } else {
             const zoom = Math.pow(1.3, scrollValue);
-            this.camera.lerp(0.75).zoom(zoom);
+            this.camera.lerp(0.25).zoom(zoom);
         }
     };
 
