@@ -53,9 +53,9 @@ jobs:
 
             - name: Check if package exists on npm
               run: |
-                  if npm view ara3d-webgl@latest version 2>/dev/null; then
+                  if npm view @yschindel/ara3d-webgl@latest version 2>/dev/null; then
                     echo "✓ Package exists on npm"
-                    npm view ara3d-webgl versions --json
+                    npm view @yschindel/ara3d-webgl versions --json
                   else
                     echo "⚠ Package does not exist on npm (this will be the first publish)"
                   fi
@@ -68,4 +68,4 @@ jobs:
               run: npm run build:lib
 
             - name: Publish to npm
-              run: npm publish --provenance
+              run: npm publish --access public --provenance
