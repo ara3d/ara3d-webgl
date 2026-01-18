@@ -35652,7 +35652,7 @@ class MouseHandler extends InputHandler {
         this.camera.speed -= scrollValue;
       } else {
         const zoom = Math.pow(1.3, scrollValue);
-        this.camera.lerp(0.75).zoom(zoom);
+        this.camera.lerp(0.25).zoom(zoom);
       }
     });
     __publicField(this, "onMouseUp", (event) => {
@@ -44487,4 +44487,4 @@ export {
   PropertyBinding as y,
   BufferGeometry as z
 };
-//# sourceMappingURL=compressors.25b9b1d3.js.map
+//# sourceMappingURL=compressors.21634570.js.map

@@ -4,7 +4,7 @@ var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
   return value;
 };
-import { W as Group, E as Mesh, z as BufferGeometry, B as BufferAttribute, I as InstancedMesh, ah as StaticDrawUsage, j as Matrix4, w as MeshStandardMaterial, C as Color, x as DoubleSide, k as Vector3, Q as Quaternion, ai as JSZip, aj as compressors } from "./compressors.25b9b1d3.js";
+import { W as Group, E as Mesh, z as BufferGeometry, B as BufferAttribute, I as InstancedMesh, ah as StaticDrawUsage, j as Matrix4, w as MeshStandardMaterial, C as Color, x as DoubleSide, k as Vector3, Q as Quaternion, ai as JSZip, aj as compressors } from "./compressors.21634570.js";
 const ParquetTypes = [
   "BOOLEAN",
   "INT32",
@@ -1975,21 +1975,31 @@ function createMergedAndSingleMeshes(materialGroups) {
       const mesh = new Mesh(i.geometry, i.material);
       mesh.matrixAutoUpdate = false;
       mesh.matrix.copy(i.transform);
+      mesh.userData.pick = {
+        kind: "single",
+        instanceIndex: i.instance
+      };
       r.push(mesh);
       continue;
     }
     const geomsToMerge = [];
+    const instanceIndices = [];
     for (const i of materialGroup.instances) {
-      const geom = i.geometry;
-      if (!i.isIdentity) {
-        geom.applyMatrix4(i.transform);
-        i.isIdentity = true;
-      }
+      const geom = i.isIdentity ? i.geometry : i.geometry.clone().applyMatrix4(i.transform);
       geomsToMerge.push(geom);
+      instanceIndices.push(i.instance);
     }
-    const mergedGeometry = mergeGeometries(geomsToMerge);
+    const { geometry: mergedGeometry, triToInstanceIndex } = mergeGeometries(geomsToMerge);
     const mergedMesh = new Mesh(mergedGeometry, material);
     mergedMesh.name = `MergedStatic_Material_${material.Id}`;
+    const triToInstanceIndexMap = new Uint32Array(triToInstanceIndex.length);
+    for (let i = 0; i < triToInstanceIndex.length; i++) {
+      triToInstanceIndexMap[i] = instanceIndices[triToInstanceIndex[i]];
+    }
+    mergedMesh.userData.pick = {
+      kind: "merged",
+      triToInstanceIndex: triToInstanceIndexMap
+    };
     r.push(mergedMesh);
   }
   return r;
@@ -2006,6 +2016,7 @@ function mergeGeometries(geometries) {
   }
   const mergedPositions = new Float32Array(posCount * 3);
   const mergedIndices = new Uint32Array(indexCount);
+  const triToInstanceIndex = new Uint32Array(indexCount / 3);
   let indexOffset = 0;
   let vertexOffset = 0;
   for (let i = 0, l = geometries.length; i < l; i++) {
@@ -2017,6 +2028,7 @@ function mergeGeometries(geometries) {
     const vertCount = posAttr.count;
     const idxCount = indexAttr.count;
     const posItemSize = posAttr.itemSize;
+    const triCount = idxCount / 3;
     const srcPosLength = vertCount * posItemSize;
     const dstPosOffset = vertexOffset * posItemSize;
     mergedPositions.set(
@@ -2025,13 +2037,17 @@ function mergeGeometries(geometries) {
     );
     for (let j = 0; j < idxCount; j++)
       mergedIndices[indexOffset + j] = srcIndexArray[j] + vertexOffset;
+    const triStart = indexOffset / 3;
+    for (let triIdx = 0; triIdx < triCount; triIdx++) {
+      triToInstanceIndex[triStart + triIdx] = i;
+    }
     vertexOffset += vertCount;
     indexOffset += idxCount;
   }
   const mergedGeom = new BufferGeometry();
   mergedGeom.setAttribute("position", new BufferAttribute(mergedPositions, 3));
   mergedGeom.setIndex(new BufferAttribute(mergedIndices, 1));
-  return mergedGeom;
+  return { geometry: mergedGeom, triToInstanceIndex };
 }
 function groupInstances(instances) {
   const groups = /* @__PURE__ */ new Map();
@@ -2074,11 +2090,18 @@ function createInstancedMeshes(instanceGroups) {
         continue;
       const instanced = new InstancedMesh(geometry, material, count);
       instanced.instanceMatrix.setUsage(StaticDrawUsage);
-      for (let i = 0; i < count; i++)
+      const instanceIndices = new Uint32Array(count);
+      for (let i = 0; i < count; i++) {
         instanced.setMatrixAt(i, instances[i].transform);
+        instanceIndices[i] = instances[i].instance;
+      }
       instanced.frustumCulled = false;
       instanced.matrixAutoUpdate = false;
       instanced.matrixWorldNeedsUpdate = false;
+      instanced.userData.pick = {
+        kind: "instanced",
+        instanceIndices
+      };
       r.push(instanced);
     }
   }
@@ -2272,6 +2295,9 @@ class BimResolver {
   GetInstanceDocumentName(i) {
     return this.GetEntityDocumentName(i.entity);
   }
+  GetInstanceGlobalId(i) {
+    return this.GetString(this.Entities.GlobalId[i.entity]);
+  }
   *EntityIndices() {
     for (let i = 0; i < this.EntityCount; i++)
       yield i;
@@ -2298,6 +2324,11 @@ class BimQuery {
   CategoryToInstances() {
     return this.FuncToInstances(
       (i) => this.Resolver.GetInstanceCategoryName(i)
+    );
+  }
+  GlobalIdToInstances() {
+    return this.FuncToInstances(
+      (i) => this.Resolver.GetInstanceGlobalId(i)
     );
   }
 }
@@ -2366,4 +2397,4 @@ export {
   BimOpenSchemaLoader as B,
   loadBimGeometryFromZip as l
 };
-//# sourceMappingURL=bimOpenSchemaLoader.e5358af1.js.map
+//# sourceMappingURL=bimOpenSchemaLoader.b888f5fc.js.map
