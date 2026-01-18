@@ -1,74 +1,74 @@
 {
-  "name": "ara3d-webgl",
-  "version": "1.3.0",
-  "description": "A 3D viewer designed for large architectural (BIM) models built on top of Three.JS.",
-  "files": [
-    "dist"
-  ],
-  "types": "./dist/types/index.d.ts",
-  "module": "/dist/ara3d-webgl.mjs",
-  "homepage": "https://github.com/ara3d/ara3d-webgl.git",
-  "bugs": {
-    "url": "https://github.com/ara3d/ara3d-webgl/issues"
-  },
-  "license": "MIT",
-  "author": "Ara 3D <info@ara3d.com>",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/ara3d/ara3d-webgl.git"
-  },
-  "scripts": {
-    "dev": "vite --config vite.config.docs.js --host",
-    "build:docs": "vite build --config vite.config.docs.js && npm run gentypes",
-    "build:lib": "vite build --config vite.config.lib.js && npm run gentypes",
-    "dev:lib-watch": "vite build --config vite.config.lib.js --watch",
-    "preview:docs": "vite preview --mode github --config vite.config.docs.js --host",
-    "serve:docs": "http-server ./docs -o --host",
-    "eslint": "eslint --ext .js,.ts src --fix",
-    "gentypes": "tsc --declaration --emitDeclarationOnly --outdir ./dist/types"
-  },
-  "devDependencies": {
-    "@types/axios": "^0.14.0",
-    "@typescript-eslint/eslint-plugin": "^5.45.1",
-    "@typescript-eslint/parser": "^5.45.1",
-    "eslint": "^8.29.0",
-    "eslint-config-prettier": "^8.5.0",
-    "eslint-config-standard": "^17.0.0",
-    "eslint-plugin-import": "^2.26.0",
-    "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-prettier": "^4.2.1",
-    "eslint-plugin-promise": "^6.1.1",
-    "http-server": "^14",
-    "opener": "^1.5.2",
-    "prettier": "^2.8.0",
-    "typescript": "^5.9.3",
-    "vite": "^3.2.5"
-  },
-  "dependencies": {
-    "@types/node": "^18.11.11",
-    "deepmerge": "^4.2.2",
-    "hyparquet": "^1.23.0",
-    "hyparquet-compressors": "^1.1.1",
-    "jszip": "^3.10.1",
-    "ste-events": "^3.0.7",
-    "ste-signals": "^3.0.9",
-    "ste-simple-events": "^3.0.7",
-    "three": "^0.182.0"
-  },
-  "keywords": [
-    "3d",
-    "ara3d",
-    "ara 3d",
-    "bim",
-    "viewer",
-    "three.js",
-    "model",
-    "aec",
-    "BIM Open Schema",
-    "BIM",
-    "BOS",
-    ".bos",
-    "loader",
-    "webgl"
-  ]
+    "name": "@yschindel/ara3d-webgl",
+    "version": "1.3.11",
+    "description": "A 3D viewer designed for large architectural (BIM) models built on top of Three.JS.",
+    "files": [
+        "dist"
+    ],
+    "types": "./dist/types/index.d.ts",
+    "module": "/dist/ara3d-webgl.mjs",
+    "homepage": "https://github.com/yschindel/ara3d-webgl.git",
+    "bugs": {
+        "url": "https://github.com/yschindel/ara3d-webgl/issues"
+    },
+    "license": "MIT",
+    "author": "Ara 3D <info@ara3d.com>",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/yschindel/ara3d-webgl.git"
+    },
+    "scripts": {
+        "dev": "vite --config vite.config.docs.js --host",
+        "build:docs": "vite build --config vite.config.docs.js && npm run gentypes",
+        "build:lib": "vite build --config vite.config.lib.js && npm run gentypes",
+        "dev:lib-watch": "vite build --config vite.config.lib.js --watch",
+        "preview:docs": "vite preview --mode github --config vite.config.docs.js --host",
+        "serve:docs": "http-server ./docs -o --host",
+        "eslint": "eslint --ext .js,.ts src --fix",
+        "gentypes": "tsc --declaration --emitDeclarationOnly --outdir ./dist/types"
+    },
+    "devDependencies": {
+        "@types/axios": "^0.14.0",
+        "@typescript-eslint/eslint-plugin": "^5.45.1",
+        "@typescript-eslint/parser": "^5.45.1",
+        "eslint": "^8.29.0",
+        "eslint-config-prettier": "^8.5.0",
+        "eslint-config-standard": "^17.0.0",
+        "eslint-plugin-import": "^2.26.0",
+        "eslint-plugin-node": "^11.1.0",
+        "eslint-plugin-prettier": "^4.2.1",
+        "eslint-plugin-promise": "^6.1.1",
+        "http-server": "^14",
+        "opener": "^1.5.2",
+        "prettier": "^2.8.0",
+        "typescript": "^5.9.3",
+        "vite": "^3.2.5"
+    },
+    "dependencies": {
+        "@types/node": "^18.11.11",
+        "deepmerge": "^4.2.2",
+        "hyparquet": "^1.23.0",
+        "hyparquet-compressors": "^1.1.1",
+        "jszip": "^3.10.1",
+        "ste-events": "^3.0.7",
+        "ste-signals": "^3.0.9",
+        "ste-simple-events": "^3.0.7",
+        "three": "^0.182.0"
+    },
+    "keywords": [
+        "3d",
+        "ara3d",
+        "ara 3d",
+        "bim",
+        "viewer",
+        "three.js",
+        "model",
+        "aec",
+        "BIM Open Schema",
+        "BIM",
+        "BOS",
+        ".bos",
+        "loader",
+        "webgl"
+    ]
 }

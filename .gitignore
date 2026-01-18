@@ -4,6 +4,7 @@
 !.eslintrc.cjs
 !.eslintrc.json
 !.prettierrc.json
+!.github
 
 #ignore build
 dist/*
