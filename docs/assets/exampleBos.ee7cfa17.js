@@ -1,5 +1,5 @@
-import { V as Viewer } from "./compressors.21634570.js";
-import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.b888f5fc.js";
+import { V as Viewer } from "./compressors.ca4e4f79.js";
+import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.61d47ee3.js";
 async function runExample() {
   const viewer = new Viewer();
   const loader = new BimOpenSchemaLoader();
@@ -10,4 +10,4 @@ async function runExample() {
   viewer.add(group);
 }
 runExample();
-//# sourceMappingURL=exampleBos.33674521.js.map
+//# sourceMappingURL=exampleBos.ee7cfa17.js.map

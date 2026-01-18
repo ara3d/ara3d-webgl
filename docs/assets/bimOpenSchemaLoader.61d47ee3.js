@@ -4,7 +4,7 @@ var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
   return value;
 };
-import { W as Group, E as Mesh, z as BufferGeometry, B as BufferAttribute, I as InstancedMesh, ah as StaticDrawUsage, j as Matrix4, w as MeshStandardMaterial, C as Color, x as DoubleSide, k as Vector3, Q as Quaternion, ai as JSZip, aj as compressors } from "./compressors.21634570.js";
+import { W as Group, E as Mesh, z as BufferGeometry, B as BufferAttribute, I as InstancedMesh, ah as StaticDrawUsage, j as Matrix4, w as MeshStandardMaterial, C as Color, x as DoubleSide, k as Vector3, Q as Quaternion, ai as JSZip, aj as compressors } from "./compressors.ca4e4f79.js";
 const ParquetTypes = [
   "BOOLEAN",
   "INT32",
@@ -2397,4 +2397,4 @@ export {
   BimOpenSchemaLoader as B,
   loadBimGeometryFromZip as l
 };
-//# sourceMappingURL=bimOpenSchemaLoader.b888f5fc.js.map
+//# sourceMappingURL=bimOpenSchemaLoader.61d47ee3.js.map
