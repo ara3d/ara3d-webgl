@@ -1,5 +1,7 @@
 # Ara 3D WebGL - BIM Open Schema Viewer
 
+![NPM Version](https://img.shields.io/npm/v/%40ara3d%2Fara3d-webgl)
+
 ## [Live Demo](https://ara3d.github.io/ara3d-webgl/)
 
 <img
