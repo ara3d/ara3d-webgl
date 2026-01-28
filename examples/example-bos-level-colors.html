@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Basic Example</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+    <script type="module">
+    import * as ARA3D from '../src/index';
+    import { showFilter } from './filterPanel.js'; // (unused right now; fine to keep if you’ll use it soon)
+    import * as THREE from 'three';
+
+    function generateRandomMaterialsForMap(map)
+    {
+        // map: Map<any, any> where keys are level/category identifiers.
+        // Returns: Map<key, THREE.Material>
+        const out = new Map();
+
+        // Golden ratio hue step -> nicely spaced distinct colors.
+        // Using HSL makes it easy to keep “reasonably visible” colors.
+        const phi = 0.618033988749895;
+        let h = Math.random(); // start anywhere, then step
+
+        for (const key of map.keys())
+        {
+            h = (h + phi) % 1.0;
+
+            const color = new THREE.Color().setHSL(
+                h,
+                0.45, // saturation
+                0.2  // lightness
+                );
+
+            // StandardMaterial gives decent shading without needing lights to look awful.
+            // If your viewer scene is unlit, switch to MeshBasicMaterial.
+            const material = new THREE.MeshStandardMaterial({
+                color,
+                roughness: 0.85,
+                metalness: 0.0,
+                // You can set transparent/opacity if you ever want “faded” categories.
+                //transparent: true,
+                //opacity: 0.5,
+                flatShading: true,
+                side: THREE.DoubleSide,
+                });
+
+            out.set(key, material);
+        }
+
+        return out;
+    }
+    
+    async function runExample() {
+        const viewer = new ARA3D.Viewer();
+        const loader = new ARA3D.BimOpenSchemaLoader();
+
+        console.time('Loading .bos file');
+        const bimData = await loader.load('/ara3d-webgl/Snowdon Towers Sample Architectural.bos');
+        console.timeEnd('Loading .bos file');
+
+        const levelToInstances = bimData.Query.LevelToInstances();
+        const materialsByLevel = generateRandomMaterialsForMap(levelToInstances);
+
+        const instances = [];
+        for (const [levelKey, instGroup] of levelToInstances)
+        {
+            const material = materialsByLevel.get(levelKey);
+            if (!material) continue;
+            for (const inst of instGroup)
+            {
+               instances.push({ ...inst, material });
+            }
+        }
+
+        const group = bimData.rebuildGeometry(instances);
+        viewer.add(group);
+    }
+
+    runExample();
+    </script>
+</body>
+</html>

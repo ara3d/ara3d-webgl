@@ -13,8 +13,9 @@ import { buildGeometry } from './buildGeometryGroup';
 import { buildInstances } from './buildInstances';
 import { BimData } from './bimData';
 import { BimEntities } from './bimEntities';
-import { BimResolver } from './bimResolver';
 import { BimQuery } from './bimQuery';
+import { BimParameterDescriptors } from './BimParameterDescriptors';
+import { BimParameterTable } from './BimParameterTable';
 
 /**
  * Loader that takes a URL to a .ZIP or .BOS file containing BIM Open Schema geometry parquet tables:
@@ -31,9 +32,9 @@ export class BimOpenSchemaLoader {
         const arrayBuffer = await response.arrayBuffer();
         const zip = await JSZip.loadAsync(arrayBuffer);
         const bimData = await loadBimGeometryFromZip(zip);
-        bimData.Resolver = new BimResolver(bimData);
-        bimData.Query = new BimQuery(bimData);
         bimData.Instances = buildInstances(bimData.BimGeometry);
+        bimData.Query = new BimQuery(bimData);
+        bimData.Resolver = bimData.Query.Resolver;
         bimData.ThreeGeometry = buildGeometry(bimData.Instances);
         return bimData;
     }
@@ -70,7 +71,10 @@ export async function loadBimGeometryFromZip(zip: JSZip): Promise<BimData> {
             metadata,
             onChunk(chunk: ColumnData) {
                 let data = chunk.columnData;
-                if (ctor && data.constructor.name != ctor.name) {
+
+                // Convert everything except explicit BigInt64Array
+                // Which happens for the "long" value that is encoded 
+                if (ctor && data.constructor.name != ctor.name && !(data instanceof BigInt64Array)) {
                     data = new ctor(data);
                 }
                 r[chunk.columnName] = data;
@@ -88,9 +92,19 @@ export async function loadBimGeometryFromZip(zip: JSZip): Promise<BimData> {
     await readParquetTable('Materials', bg, Uint8Array);
     await readParquetTable('Transforms', bg, Float32Array);
     bd.BimGeometry = bg as BimGeometry;
-    const entities = {};
-    await readParquetTable('Entities', entities, BigInt64Array);
-    bd.Entities = entities as BimEntities;
+    
+    await readParquetTable('Entities', bd.Entities = {} as BimEntities, Int32Array);
+
+    await readParquetTable('Descriptors', bd.Descriptors = {} as BimParameterDescriptors);
+
+    await readParquetTable('IntegerParameters', bd.IntegerParameters = {} as BimParameterTable, Int32Array);
+    await readParquetTable('SingleParameters', bd.SingleParameters = {} as BimParameterTable, Int32Array);
+    await readParquetTable('StringParameters', bd.StringParameters = {} as BimParameterTable, Int32Array);
+    await readParquetTable('EntityParameters', bd.EntityParameters = {} as BimParameterTable, Int32Array);
+    await readParquetTable('PointParameters', bd.PointParameters = {} as BimParameterTable, Int32Array);
+
+    // NOTE: I am not reading the PointParameter table at the current time. 
+
     await readParquetTable('Strings', bd);
     return bd;
 }
