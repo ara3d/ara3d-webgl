@@ -106,7 +106,7 @@ function computeMaterials(bim: BimGeometry)
         const g = bim.MaterialGreen[mi] / 255;
         const b = bim.MaterialBlue[mi] / 255;
         const a = bim.MaterialAlpha[mi] / 255;
-        const roughness = bim.MaterialRoughness[mi] / 255;
+        const roughness = bim.MaterialRoughness[mi] / 255;  
         const metalness = bim.MaterialMetallic[mi] / 255;
 
         const mat = new THREE.MeshStandardMaterial({

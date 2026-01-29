@@ -10,12 +10,11 @@
     "allowSyntheticDefaultImports": true,
   },
   "files": [
-    "src/index.ts",
-    "src/loader/bimData.ts",
-    "src/loader/bimResolver.ts",
-    "src/loader/bimQuery.ts",
-    "src/loader/bimEntities.ts",
-    "./src/loader/BimParameters.ts",
+    "./src/index.ts",
+    "./src/loader/bimData.ts",
+    "./src/loader/bimResolver.ts",
+    "./src/loader/bimQuery.ts",
+    "./src/loader/bimEntities.ts",
     "./src/loader/BimParameterTable.ts",
     "./src/loader/BimParameterDescriptors.ts"
   ]

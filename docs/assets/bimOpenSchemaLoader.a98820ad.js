@@ -2113,22 +2113,28 @@ function buildInstances(bg) {
   const geometries = computeMeshGeometries(bg);
   const materials = computeMaterials(bg);
   const instanceCount = bg.InstanceMeshIndex.length;
-  const instances = new Array(instanceCount);
+  const instances = [];
   const identity = new Matrix4();
   for (let i = 0; i < instanceCount; i++) {
-    const geometry = geometries[bg.InstanceMeshIndex[i]];
+    const meshIndex = bg.InstanceMeshIndex[i];
+    if (meshIndex < 0)
+      continue;
+    const flag = bg.InstanceFlags[i];
+    if (flag & 1)
+      continue;
+    const geometry = geometries[meshIndex];
     const material = materials[bg.InstanceMaterialIndex[i]];
     const transform = transforms[bg.InstanceTransformIndex[i]];
     const entity = bg.InstanceEntityIndex[i];
     const isIdentity = transform.equals(identity);
-    instances[i] = {
+    instances.push({
       instance: i,
       geometry,
       material,
       transform,
       entity,
       isIdentity
-    };
+    });
   }
   console.timeEnd("Building instances");
   return instances;
@@ -2240,6 +2246,12 @@ class BimData {
     __publicField(this, "Resolver");
     __publicField(this, "Query");
     __publicField(this, "Instances");
+    __publicField(this, "Descriptors");
+    __publicField(this, "IntegerParameters");
+    __publicField(this, "StringParameters");
+    __publicField(this, "EntityParameters");
+    __publicField(this, "SingleParameters");
+    __publicField(this, "PointParameters");
   }
   rebuildGeometry(instances) {
     return buildGeometry(instances);
@@ -2247,17 +2259,59 @@ class BimData {
 }
 class BimResolver {
   constructor(Data) {
+    __publicField(this, "Descriptors");
     __publicField(this, "Strings");
     __publicField(this, "Entities");
     __publicField(this, "InstanceCount");
     __publicField(this, "EntityCount");
     __publicField(this, "BimGeometry");
+    __publicField(this, "DescriptorCount");
+    __publicField(this, "ParameterMap");
     this.Data = Data;
     this.Entities = Data.Entities;
     this.Strings = Data.Strings;
     this.BimGeometry = Data.BimGeometry;
     this.InstanceCount = this.BimGeometry.InstanceEntityIndex.length;
     this.EntityCount = this.Entities.Category.length;
+    this.Descriptors = Data.Descriptors;
+    this.DescriptorCount = this.Descriptors.Name.length;
+    console.time("Computing parameters");
+    this.ParameterMap = /* @__PURE__ */ new Map();
+    this.ProcessParameters(Data.IntegerParameters);
+    this.ProcessParameters(Data.SingleParameters);
+    this.ProcessParameters(Data.StringParameters);
+    this.ProcessParameters(Data.EntityParameters);
+    console.timeEnd("Computing parameters");
+  }
+  GetVal(rawVal, descType) {
+    if (descType == 3)
+      return this.Strings[rawVal];
+    if (descType == 2) {
+      if (rawVal >= 0)
+        return this.GetEntityName(rawVal);
+      return "";
+    }
+    return rawVal;
+  }
+  ProcessParameters(table) {
+    for (let i = 0; i < table.Value.length; i++) {
+      let descIndex = table.Descriptor[i];
+      let entityIndex = table.Entity[i];
+      let rawVal = table.Value[i];
+      if (descIndex < 0)
+        continue;
+      let nameIndex = this.Descriptors.Name[descIndex];
+      let descType = this.Descriptors.Type[descIndex];
+      let Value = this.GetVal(rawVal, descType);
+      let Name = this.Strings[nameIndex];
+      let param = { Name, Value };
+      let tmp = this.ParameterMap.get(entityIndex);
+      if (tmp === void 0) {
+        this.ParameterMap.set(entityIndex, [param]);
+      } else {
+        tmp.push(param);
+      }
+    }
   }
   GetString(stringIndex) {
     return this.Strings[stringIndex];
@@ -2283,6 +2337,9 @@ class BimResolver {
   GetEntityDocumentName(i) {
     return this.GetEntityName(this.GetEntityDocument(i));
   }
+  GetEntityParameters(i) {
+    return this.ParameterMap.get(i);
+  }
   GetInstanceName(i) {
     return this.GetEntityName(i.entity);
   }
@@ -2298,9 +2355,41 @@ class BimResolver {
   GetInstanceGlobalId(i) {
     return this.GetString(this.Entities.GlobalId[i.entity]);
   }
+  GetInstanceParameters(i) {
+    return this.GetEntityParameters(i.entity);
+  }
+  GetDescriptorName(i) {
+    return this.GetString(this.Descriptors.Name[i]);
+  }
+  GetDescriptorType(i) {
+    return this.Descriptors.Type[i];
+  }
+  GetDescriptorGroup(i) {
+    return this.GetString(this.Descriptors.Group[i]);
+  }
+  GetDescriptorUnits(i) {
+    return this.GetString(this.Descriptors.Units[i]);
+  }
   *EntityIndices() {
     for (let i = 0; i < this.EntityCount; i++)
       yield i;
+  }
+  *InstanceIndices() {
+    for (let i = 0; i < this.InstanceCount; i++)
+      yield i;
+  }
+  *DescriptorIndices() {
+    for (let i = 0; i < this.DescriptorCount; i++)
+      yield i;
+  }
+  first(iterable, predicate, _default) {
+    for (const value of iterable)
+      if (predicate(value))
+        return value;
+    return _default;
+  }
+  FindDescriptor(name) {
+    return this.first(this.DescriptorIndices(), (i) => this.GetDescriptorName(i) == name, -1);
   }
 }
 class BimQuery {
@@ -2308,6 +2397,10 @@ class BimQuery {
     __publicField(this, "Resolver");
     this.Data = Data;
     this.Resolver = new BimResolver(Data);
+    let levelDesc = this.Resolver.FindDescriptor("Rvt:Element:Level");
+    console.log("The level descriptor is ", levelDesc);
+    let table = Data.EntityParameters;
+    table.Descriptor;
   }
   FuncToInstances(f) {
     const r = /* @__PURE__ */ new Map();
@@ -2331,6 +2424,19 @@ class BimQuery {
       (i) => this.Resolver.GetInstanceGlobalId(i)
     );
   }
+  GetLevelFromParameters(ps) {
+    if (!ps)
+      return null;
+    let p = ps.find((p2) => p2.Name == "Rvt:Element:Level");
+    if (!p)
+      return "";
+    return String(p.Value);
+  }
+  LevelToInstances() {
+    return this.FuncToInstances(
+      (i) => this.GetLevelFromParameters(this.Resolver.GetInstanceParameters(i))
+    );
+  }
 }
 class BimOpenSchemaLoader {
   async load(source) {
@@ -2343,9 +2449,9 @@ class BimOpenSchemaLoader {
     const arrayBuffer = await response.arrayBuffer();
     const zip = await JSZip.loadAsync(arrayBuffer);
     const bimData = await loadBimGeometryFromZip(zip);
-    bimData.Resolver = new BimResolver(bimData);
-    bimData.Query = new BimQuery(bimData);
     bimData.Instances = buildInstances(bimData.BimGeometry);
+    bimData.Query = new BimQuery(bimData);
+    bimData.Resolver = bimData.Query.Resolver;
     bimData.ThreeGeometry = buildGeometry(bimData.Instances);
     return bimData;
   }
@@ -2370,7 +2476,7 @@ async function loadBimGeometryFromZip(zip) {
       metadata,
       onChunk(chunk) {
         let data = chunk.columnData;
-        if (ctor && data.constructor.name != ctor.name) {
+        if (ctor && data.constructor.name != ctor.name && !(data instanceof BigInt64Array)) {
           data = new ctor(data);
         }
         r[chunk.columnName] = data;
@@ -2387,9 +2493,13 @@ async function loadBimGeometryFromZip(zip) {
   await readParquetTable("Materials", bg, Uint8Array);
   await readParquetTable("Transforms", bg, Float32Array);
   bd.BimGeometry = bg;
-  const entities = {};
-  await readParquetTable("Entities", entities, BigInt64Array);
-  bd.Entities = entities;
+  await readParquetTable("Entities", bd.Entities = {}, Int32Array);
+  await readParquetTable("Descriptors", bd.Descriptors = {});
+  await readParquetTable("IntegerParameters", bd.IntegerParameters = {}, Int32Array);
+  await readParquetTable("SingleParameters", bd.SingleParameters = {}, Int32Array);
+  await readParquetTable("StringParameters", bd.StringParameters = {}, Int32Array);
+  await readParquetTable("EntityParameters", bd.EntityParameters = {}, Int32Array);
+  await readParquetTable("PointParameters", bd.PointParameters = {}, Int32Array);
   await readParquetTable("Strings", bd);
   return bd;
 }
@@ -2397,4 +2507,4 @@ export {
   BimOpenSchemaLoader as B,
   loadBimGeometryFromZip as l
 };
-//# sourceMappingURL=bimOpenSchemaLoader.61d47ee3.js.map
+//# sourceMappingURL=bimOpenSchemaLoader.a98820ad.js.map

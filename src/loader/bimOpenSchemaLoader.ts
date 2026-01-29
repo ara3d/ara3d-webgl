@@ -103,8 +103,6 @@ export async function loadBimGeometryFromZip(zip: JSZip): Promise<BimData> {
     await readParquetTable('EntityParameters', bd.EntityParameters = {} as BimParameterTable, Int32Array);
     await readParquetTable('PointParameters', bd.PointParameters = {} as BimParameterTable, Int32Array);
 
-    // NOTE: I am not reading the PointParameter table at the current time. 
-
     await readParquetTable('Strings', bd);
     return bd;
 }
