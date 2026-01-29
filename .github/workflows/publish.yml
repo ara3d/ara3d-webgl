@@ -23,6 +23,44 @@ jobs:
                   node-version: '20'
                   registry-url: 'https://registry.npmjs.org'
 
+            - name: Upgrade npm (required 11.5.1+ for OIDC)
+              run: npm install -g npm@latest
+
+            - name: Verify npm version and OIDC support
+              run: |
+                  npm --version
+                  echo "NPM version check: $(npm --version | cut -d. -f1)"
+                  if [ "$(npm --version | cut -d. -f1)" -lt 11 ]; then
+                    echo "ERROR: npm version must be 11.5.1+ for OIDC"
+                    exit 1
+                  fi
+
+            - name: Clear npm config that might interfere
+              run: |
+                  npm config delete always-auth || true
+                  npm config delete _auth || true
+                  npm config delete _authToken || true
+
+            - name: Verify OIDC environment
+              run: |
+                  echo "Checking OIDC environment variables:"
+                  [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ] && echo "✓ ACTIONS_ID_TOKEN_REQUEST_URL is set" || echo "✗ ACTIONS_ID_TOKEN_REQUEST_URL is NOT set"
+                  [ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ] && echo "✓ ACTIONS_ID_TOKEN_REQUEST_TOKEN is set" || echo "✗ ACTIONS_ID_TOKEN_REQUEST_TOKEN is NOT set"
+                  echo ""
+                  echo "GitHub Context:"
+                  echo "Repository: ${{ github.repository }}"
+                  echo "Workflow: ${{ github.workflow }}"
+
+            - name: Check if package exists on npm
+              run: |
+                  if npm view @yschindel/ara3d-webgl@latest version 2>/dev/null; then
+                    echo "✓ Package exists on npm"
+                    npm view @yschindel/ara3d-webgl versions --json
+                  else
+                    echo "⚠ Package does not exist on npm (this will be the first publish)"
+                  fi
+              continue-on-error: true
+
             - name: Install dependencies
               run: npm ci
 
@@ -30,4 +68,4 @@ jobs:
               run: npm run build:lib
 
             - name: Publish to npm
-              run: npm publish
+              run: npm publish --access public --provenance

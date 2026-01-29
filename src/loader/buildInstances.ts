@@ -18,22 +18,31 @@ export function buildInstances(bg: BimGeometry): Array<Instance> {
     const geometries = computeMeshGeometries(bg);
     const materials = computeMaterials(bg);
     const instanceCount = bg.InstanceMeshIndex.length;
-    const instances = new Array<Instance>(instanceCount);
+    const instances = [];
     const identity = new THREE.Matrix4;
     for (let i = 0; i < instanceCount; i++) {        
-        const geometry = geometries[bg.InstanceMeshIndex[i]];
+        const meshIndex = bg.InstanceMeshIndex[i];        
+        if (meshIndex < 0) continue;
+
+        const flag = bg.InstanceFlags[i];
+
+        // Check if the "hidden" flag is set. 
+        if (flag & 0x1) continue;
+
+        const geometry = geometries[meshIndex];
         const material = materials[bg.InstanceMaterialIndex[i]];
         const transform = transforms[bg.InstanceTransformIndex[i]];
         const entity = bg.InstanceEntityIndex[i] as EntityIndex;
         const isIdentity = transform.equals(identity);
-        instances[i] = {
+        
+        instances.push({
             instance: i as InstanceIndex,
             geometry,
             material,
             transform,
             entity,
             isIdentity
-        };
+        });
     }
     console.timeEnd("Building instances");
     return instances;
@@ -97,7 +106,7 @@ function computeMaterials(bim: BimGeometry)
         const g = bim.MaterialGreen[mi] / 255;
         const b = bim.MaterialBlue[mi] / 255;
         const a = bim.MaterialAlpha[mi] / 255;
-        const roughness = bim.MaterialRoughness[mi] / 255;
+        const roughness = bim.MaterialRoughness[mi] / 255;  
         const metalness = bim.MaterialMetallic[mi] / 255;
 
         const mat = new THREE.MeshStandardMaterial({

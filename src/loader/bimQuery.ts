@@ -1,5 +1,5 @@
-import { BimData, InstanceIndex } from './bimData';
-import { BimResolver } from './bimResolver';
+import { BimData, DescriptorIndex, InstanceIndex } from './bimData';
+import { BimResolver, Parameter } from './bimResolver';
 import { Instance } from './buildInstances';
 
 // This class helps us make queries about the BIM data. 
@@ -7,6 +7,11 @@ import { Instance } from './buildInstances';
 export class BimQuery {
     constructor(readonly Data: BimData) {
         this.Resolver = new BimResolver(Data);
+
+        let levelDesc = this.Resolver.FindDescriptor("Rvt:Element:Level");
+        console.log("The level descriptor is ", levelDesc);
+        let table = Data.EntityParameters;
+        let descriptors = table.Descriptor;
     }
 
     readonly Resolver: BimResolver;
@@ -30,5 +35,18 @@ export class BimQuery {
     GlobalIdToInstances(): Map<string, Instance[]> {
         return this.FuncToInstances(
             i => this.Resolver.GetInstanceGlobalId(i));
+    }
+
+    GetLevelFromParameters(ps: Array<Parameter>): string   
+    {
+        if (!ps) return null;
+        let p = ps.find(p => p.Name == "Rvt:Element:Level");
+        if (!p) return ""; 
+        return String(p.Value);
+    }
+
+    LevelToInstances(): Map<string, Instance[]> {
+        return this.FuncToInstances(
+            i => this.GetLevelFromParameters(this.Resolver.GetInstanceParameters(i)));
     }
 }

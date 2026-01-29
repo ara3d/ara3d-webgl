@@ -35652,7 +35652,7 @@ class MouseHandler extends InputHandler {
         this.camera.speed -= scrollValue;
       } else {
         const zoom = Math.pow(1.3, scrollValue);
-        this.camera.lerp(0.75).zoom(zoom);
+        this.camera.lerp(0.25).zoom(zoom);
       }
     });
     __publicField(this, "onMouseUp", (event) => {
@@ -44461,6 +44461,7 @@ export {
   ConeGeometry as at,
   TorusGeometry as au,
   TorusKnotGeometry as av,
+  Raycaster as aw,
   TriangleStripDrawMode as b,
   LoaderUtils as c,
   LinearSRGBColorSpace as d,
@@ -44487,4 +44488,4 @@ export {
   PropertyBinding as y,
   BufferGeometry as z
 };
-//# sourceMappingURL=compressors.25b9b1d3.js.map
+//# sourceMappingURL=compressors.ca4e4f79.js.map

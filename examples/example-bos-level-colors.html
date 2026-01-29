@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Basic Example</title>
+  <link rel="stylesheet" href="./style.css" />
+  <style>
+    /* Simple overlay controls */
+    .ui {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 9999;
+      background: rgba(20,20,20,0.85);
+      color: #fff;
+      padding: 12px 12px 10px;
+      border-radius: 10px;
+      font: 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      min-width: 260px;
+      user-select: none;
+    }
+    .ui h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+    .row { display: grid; grid-template-columns: 90px 1fr 50px; gap: 8px; align-items: center; margin: 6px 0; }
+    .row label { opacity: 0.9; }
+    .row input[type="range"] { width: 100%; }
+    .val { text-align: right; opacity: 0.9; font-variant-numeric: tabular-nums; }
+    .btns { display: flex; gap: 8px; margin-top: 8px; }
+    button {
+      background: #2b6cb0;
+      border: 0;
+      color: white;
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:active { transform: translateY(1px); }
+  </style>
+</head>
+<body>
+  <div class="ui" id="ui">
+    <h3>Palette Controls</h3>
+
+    <div class="row">
+      <label for="sat">Saturation</label>
+      <input id="sat" type="range" min="0" max="1" step="0.01" value="0.45">
+      <div class="val" id="satVal">0.45</div>
+    </div>
+
+    <div class="row">
+      <label for="lit">Lightness</label>
+      <input id="lit" type="range" min="0" max="1" step="0.01" value="0.20">
+      <div class="val" id="litVal">0.20</div>
+    </div>
+
+    <div class="row">
+      <label for="seed">Seed Hue</label>
+      <input id="seed" type="range" min="0" max="1" step="0.001" value="0.10">
+      <div class="val" id="seedVal">0.100</div>
+    </div>
+
+    <div class="btns">
+      <button id="shuffle">Shuffle</button>
+      <button id="reset">Reset</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as ARA3D from '../src/index';
+    import * as THREE from 'three';
+
+    // ---------- State ----------
+    const paletteState = {
+      saturation: 0.45,
+      lightness: 0.20,
+      seedHue: 0.10, // start hue in [0..1)
+    };
+
+    // You can keep this constant unless you want a control for it too.
+    const PHI = 0.618033988749895;
+
+    let viewer = null;
+    let bimData = null;
+    let levelToInstances = null;
+    let currentGroup = null;
+
+    // Optional: keep the last-built instance list so we can rebuild quickly
+    // without re-querying / recreating other stuff.
+    let baseInstancesByLevel = null; // Map<levelKey, Array<inst>>
+
+    function generateRandomMaterialsForMap(map, { saturation, lightness, seedHue })
+    {
+      const out = new Map();
+      let h = seedHue;
+
+      for (const key of map.keys())
+      {
+        h = (h + PHI) % 1.0;
+        const color = new THREE.Color().setHSL(h, saturation, lightness);
+
+        const material = new THREE.MeshStandardMaterial({
+          color,
+          roughness: 0.85,
+          metalness: 0.0,
+          flatShading: true,
+          side: THREE.DoubleSide,
+        });
+
+        out.set(key, material);
+      }
+
+      return out;
+    }
+
+    function buildInstancesWithMaterials()
+    {
+      const materialsByLevel = generateRandomMaterialsForMap(levelToInstances, paletteState);
+
+      const instances = [];
+      for (const [levelKey, instGroup] of levelToInstances)
+      {
+        const material = materialsByLevel.get(levelKey);
+        if (!material) continue;
+
+        for (const inst of instGroup)
+        {
+          // clone + attach material (avoids mutating original)
+          instances.push({ ...inst, material });
+        }
+      }
+      return instances;
+    }
+
+    function rebuildSceneGeometry()
+    {
+      if (!viewer || !bimData || !levelToInstances) return;
+
+      // Remove previous group if present
+      if (currentGroup)
+      {
+        viewer.remove?.(currentGroup); // if Viewer supports remove
+        // If it doesn't, you can fall back to currentGroup.parent.remove(currentGroup) if it's a THREE.Object3D in a scene.
+        // e.g.: viewer.scene?.remove(currentGroup);
+        currentGroup = null;
+      }
+
+      const instances = buildInstancesWithMaterials();
+      currentGroup = bimData.rebuildGeometry(instances);
+      viewer.add(currentGroup);
+    }
+
+    function debounce(fn, ms)
+    {
+      let t = null;
+      return (...args) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn(...args), ms);
+      };
+    }
+
+    const rebuildDebounced = debounce(rebuildSceneGeometry, 60);
+
+    // ---------- UI wiring ----------
+    function setText(id, txt) { document.getElementById(id).textContent = txt; }
+
+    function syncUI()
+    {
+      const sat = document.getElementById('sat');
+      const lit = document.getElementById('lit');
+      const seed = document.getElementById('seed');
+
+      sat.value = String(paletteState.saturation);
+      lit.value = String(paletteState.lightness);
+      seed.value = String(paletteState.seedHue);
+
+      setText('satVal', paletteState.saturation.toFixed(2));
+      setText('litVal', paletteState.lightness.toFixed(2));
+      setText('seedVal', paletteState.seedHue.toFixed(3));
+    }
+
+    function bindUI()
+    {
+      const sat = document.getElementById('sat');
+      const lit = document.getElementById('lit');
+      const seed = document.getElementById('seed');
+      const shuffle = document.getElementById('shuffle');
+      const reset = document.getElementById('reset');
+
+      sat.addEventListener('input', () => {
+        paletteState.saturation = Number(sat.value);
+        setText('satVal', paletteState.saturation.toFixed(2));
+        rebuildDebounced();
+      });
+
+      lit.addEventListener('input', () => {
+        paletteState.lightness = Number(lit.value);
+        setText('litVal', paletteState.lightness.toFixed(2));
+        rebuildDebounced();
+      });
+
+      seed.addEventListener('input', () => {
+        paletteState.seedHue = Number(seed.value);
+        setText('seedVal', paletteState.seedHue.toFixed(3));
+        rebuildDebounced();
+      });
+
+      shuffle.addEventListener('click', () => {
+        paletteState.seedHue = Math.random();
+        syncUI();
+        rebuildSceneGeometry();
+      });
+
+      reset.addEventListener('click', () => {
+        paletteState.saturation = 0.45;
+        paletteState.lightness = 0.20;
+        paletteState.seedHue = 0.10;
+        syncUI();
+        rebuildSceneGeometry();
+      });
+    }
+
+    // ---------- Main ----------
+    async function runExample() {
+      viewer = new ARA3D.Viewer();
+      const loader = new ARA3D.BimOpenSchemaLoader();
+
+      console.time('Loading .bos file');
+      bimData = await loader.load('/ara3d-webgl/Snowdon Towers Sample Architectural.bos');
+      console.timeEnd('Loading .bos file');
+
+      levelToInstances = bimData.Query.LevelToInstances();
+
+      // UI
+      syncUI();
+      bindUI();
+
+      // Initial build
+      rebuildSceneGeometry();
+    }
+
+    runExample();
+  </script>
+</body>
+</html>
