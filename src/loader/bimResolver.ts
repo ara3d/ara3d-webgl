@@ -19,10 +19,17 @@ export class BimResolver
         this.InstanceCount = this.BimGeometry.InstanceEntityIndex.length;
         this.EntityCount = this.Entities.Category.length;
         this.Descriptors = Data.Descriptors;
-        this.DescriptorCount = this.Descriptors.Name.length;
-
-        console.time("Computing parameters");
+        this.DescriptorCount = 0;
         this.ParameterMap = new Map<EntityIndex, Array<Parameter>>();
+        
+        // If there are no descriptors, we don't have to do parameter processing
+        if (!this.Descriptors)
+        {
+            return;
+        }
+        
+        console.time("Computing parameters");
+        this.DescriptorCount = this.Descriptors.Name.length;
         this.ProcessParameters(Data.IntegerParameters);
         this.ProcessParameters(Data.SingleParameters);
         this.ProcessParameters(Data.StringParameters);

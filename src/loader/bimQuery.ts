@@ -7,11 +7,6 @@ import { Instance } from './buildInstances';
 export class BimQuery {
     constructor(readonly Data: BimData) {
         this.Resolver = new BimResolver(Data);
-
-        let levelDesc = this.Resolver.FindDescriptor("Rvt:Element:Level");
-        console.log("The level descriptor is ", levelDesc);
-        let table = Data.EntityParameters;
-        let descriptors = table.Descriptor;
     }
 
     readonly Resolver: BimResolver;
