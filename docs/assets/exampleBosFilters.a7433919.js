@@ -1,5 +1,5 @@
 import { V as Viewer, w as MeshStandardMaterial } from "./compressors.ca4e4f79.js";
-import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.a98820ad.js";
+import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.180bc89b.js";
 function showFilter(name, filter, onChange) {
   if (!name || !filter) {
     const existing = document.getElementById("ara3d-filter-panel");
@@ -375,4 +375,4 @@ async function runExample() {
   console.timeEnd("Creating filter");
 }
 runExample();
-//# sourceMappingURL=exampleBosFilters.7d4c63e2.js.map
+//# sourceMappingURL=exampleBosFilters.a7433919.js.map
