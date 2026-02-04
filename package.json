@@ -1,5 +1,5 @@
 {
-    "name": "@ara3d/ara3d-webgl",
+    "name": "@yschindel/ara3d-webgl",
     "version": "1.3.13",
     "description": "A 3D viewer designed for large architectural (BIM) models built on top of Three.JS.",
     "files": [
@@ -13,7 +13,9 @@
     },
     "license": "MIT",
     "author": "Ara 3D <info@ara3d.com>",
-    "publishConfig": { "access": "public" },
+    "publishConfig": {
+        "access": "public"
+    },
     "repository": {
         "type": "git",
         "url": "git+https://github.com/ara3d/ara3d-webgl.git"
