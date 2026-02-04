@@ -4,6 +4,7 @@ import { BimGeometry } from './bimGeometry';
 import { BimParameterDescriptors } from './BimParameterDescriptors';
 import { BimParameterTable } from './BimParameterTable';
 import { Instance } from './buildInstances';
+import { BosLoaderOptions } from './bimOpenSchemaLoader';
 
 // This class helps us efficiently look up data based on indices and a type-safe way. 
 
@@ -11,23 +12,29 @@ export type Parameter = { Name: string, Value: any }
 
 export class BimResolver 
 {
-    constructor(readonly Data: BimData) 
+    constructor(readonly Data: BimData, options?: BosLoaderOptions) 
     {
-        this.Entities = Data.Entities;
-        this.Strings = Data.Strings;
+        this.Entities = Data.Entities ?? ({} as BimEntities);
+        this.Strings = Data.Strings ?? [];
         this.BimGeometry = Data.BimGeometry;
-        this.InstanceCount = this.BimGeometry.InstanceEntityIndex.length;
-        this.EntityCount = this.Entities.Category.length;
-        this.Descriptors = Data.Descriptors;
-        this.DescriptorCount = this.Descriptors.Name.length;
+        this.InstanceCount = this.BimGeometry?.InstanceEntityIndex?.length ?? 0;
+        this.EntityCount = this.Entities?.Category?.length ?? 0;
+        this.Descriptors = options?.skipDescriptorsAndParameters
+            ? ({} as BimParameterDescriptors)
+            : (Data.Descriptors ?? ({} as BimParameterDescriptors));
+        this.DescriptorCount = options?.skipDescriptorsAndParameters
+            ? 0
+            : (this.Descriptors?.Name?.length ?? 0);
 
-        console.time("Computing parameters");
         this.ParameterMap = new Map<EntityIndex, Array<Parameter>>();
-        this.ProcessParameters(Data.IntegerParameters);
-        this.ProcessParameters(Data.SingleParameters);
-        this.ProcessParameters(Data.StringParameters);
-        this.ProcessParameters(Data.EntityParameters);
-        console.timeEnd("Computing parameters");
+        if (!options?.skipDescriptorsAndParameters) {
+            console.time("Computing parameters");
+            if (Data.IntegerParameters) this.ProcessParameters(Data.IntegerParameters);
+            if (Data.SingleParameters) this.ProcessParameters(Data.SingleParameters);
+            if (Data.StringParameters) this.ProcessParameters(Data.StringParameters);
+            if (Data.EntityParameters) this.ProcessParameters(Data.EntityParameters);
+            console.timeEnd("Computing parameters");
+        }
     }
 
     GetVal(rawVal: number, descType: number): any
@@ -43,6 +50,7 @@ export class BimResolver
 
     ProcessParameters(table: BimParameterTable)
     {
+        if (!table || !table.Value || !table.Descriptor || !table.Entity) return;
         for (let i=0; i < table.Value.length; i++)
         {
             let descIndex = table.Descriptor[i];

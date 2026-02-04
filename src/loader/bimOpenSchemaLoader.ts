@@ -28,6 +28,7 @@ export interface BosLoaderOptions {
      * Default: true (for backwards compatibility with Revit BOS files)
      */
     applyZUpToYUpRotation?: boolean;
+    skipDescriptorsAndParameters?: boolean;
 }
 
 /**
@@ -44,7 +45,7 @@ export class BimOpenSchemaLoader {
 
         const arrayBuffer = await response.arrayBuffer();
         const zip = await JSZip.loadAsync(arrayBuffer);
-        const bimData = await loadBimGeometryFromZip(zip);
+        const bimData = await loadBimGeometryFromZip(zip, options);
         bimData.Instances = buildInstances(bimData.BimGeometry);
         bimData.Query = new BimQuery(bimData);
         bimData.Resolver = bimData.Query.Resolver;
@@ -63,7 +64,7 @@ export class BimOpenSchemaLoader {
  * Reads the BOS parquet tables from a JSZip archive into a BimGeometry object.
  * This is the same idea as the previous browser version, just using package imports.
  */
-export async function loadBimGeometryFromZip(zip: JSZip): Promise<BimData> {
+export async function loadBimGeometryFromZip(zip: JSZip, options?: BosLoaderOptions): Promise<BimData> {
     // Find the file in the zip archive
     function findFileEndingWith(suffix: string): string {
         const lowerSuffix = suffix.toLowerCase();
@@ -79,9 +80,20 @@ export async function loadBimGeometryFromZip(zip: JSZip): Promise<BimData> {
     async function readParquetTable(
         name: string,
         r: any,
-        ctor: any = undefined
+        ctor: any = undefined,
+        optional: boolean = false
     ) {
-        const entryName = findFileEndingWith(name + '.parquet');
+        let entryName: string | undefined;
+        try {
+            entryName = findFileEndingWith(name + '.parquet');
+        } catch (error) {
+            if (optional) return;
+            throw error;
+        }
+        if (!entryName) {
+            if (optional) return;
+            throw new Error(`Could not find "${name}.parquet" in zip archive.`);
+        }
         const file = await zip.files[entryName].async('arraybuffer');
         const metadata = await parquetMetadataAsync(file);
         
@@ -135,14 +147,23 @@ export async function loadBimGeometryFromZip(zip: JSZip): Promise<BimData> {
     
     await readParquetTable('Entities', bd.Entities = {} as BimEntities, Int32Array);
 
-    await readParquetTable('Descriptors', bd.Descriptors = {} as BimParameterDescriptors);
+    bd.Descriptors = {} as BimParameterDescriptors;
+    if (!options?.skipDescriptorsAndParameters) {
+    await readParquetTable('Descriptors', bd.Descriptors, undefined, true);
+    }
 
-    await readParquetTable('IntegerParameters', bd.IntegerParameters = {} as BimParameterTable, Int32Array);
-    await readParquetTable('SingleParameters', bd.SingleParameters = {} as BimParameterTable, Int32Array);
-    await readParquetTable('StringParameters', bd.StringParameters = {} as BimParameterTable, Int32Array);
-    await readParquetTable('EntityParameters', bd.EntityParameters = {} as BimParameterTable, Int32Array);
-    await readParquetTable('PointParameters', bd.PointParameters = {} as BimParameterTable, Int32Array);
-
+    bd.IntegerParameters = {} as BimParameterTable;
+    bd.SingleParameters = {} as BimParameterTable;
+    bd.StringParameters = {} as BimParameterTable;
+    bd.EntityParameters = {} as BimParameterTable;
+    bd.PointParameters = {} as BimParameterTable;
+    if (!options?.skipDescriptorsAndParameters) {
+    await readParquetTable('IntegerParameters', bd.IntegerParameters, Int32Array, true);
+    await readParquetTable('SingleParameters', bd.SingleParameters, Int32Array, true);
+    await readParquetTable('StringParameters', bd.StringParameters, Int32Array, true);
+    await readParquetTable('EntityParameters', bd.EntityParameters, Int32Array, true);
+    await readParquetTable('PointParameters', bd.PointParameters, Int32Array, true);
+    }
     await readParquetTable('Strings', bd);
     return bd;
 }
