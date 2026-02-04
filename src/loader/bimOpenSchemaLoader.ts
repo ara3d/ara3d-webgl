@@ -18,10 +18,23 @@ import { BimParameterDescriptors } from './BimParameterDescriptors';
 import { BimParameterTable } from './BimParameterTable';
 
 /**
+ * Options for loading BOS files
+ */
+export interface BosLoaderOptions {
+    /**
+     * Whether to apply Z-up to Y-up rotation.
+     * - true: Apply rotation (for Revit exports which are Z-up)
+     * - false: No rotation (for IFC imports which are already Y-up compatible)
+     * Default: true (for backwards compatibility with Revit BOS files)
+     */
+    applyZUpToYUpRotation?: boolean;
+}
+
+/**
  * Loader that takes a URL to a .ZIP or .BOS file containing BIM Open Schema geometry parquet tables:
  */
 export class BimOpenSchemaLoader {
-    async load(source: string): Promise<BimData> {
+    async load(source: string, options?: BosLoaderOptions): Promise<BimData> {
         const response = await fetch(source);
         if (!response.ok) {
             throw new Error(
@@ -35,7 +48,13 @@ export class BimOpenSchemaLoader {
         bimData.Instances = buildInstances(bimData.BimGeometry);
         bimData.Query = new BimQuery(bimData);
         bimData.Resolver = bimData.Query.Resolver;
-        bimData.ThreeGeometry = buildGeometry(bimData.Instances);
+        
+        // Store geometry options for rebuildGeometry
+        // Default to true for backwards compatibility with Revit BOS files
+        bimData.geometryOptions = { 
+            applyZUpToYUpRotation: options?.applyZUpToYUpRotation ?? true 
+        };
+        bimData.ThreeGeometry = buildGeometry(bimData.Instances, bimData.geometryOptions);
         return bimData;
     }
 }
@@ -65,6 +84,18 @@ export async function loadBimGeometryFromZip(zip: JSZip): Promise<BimData> {
         const entryName = findFileEndingWith(name + '.parquet');
         const file = await zip.files[entryName].async('arraybuffer');
         const metadata = await parquetMetadataAsync(file);
+        
+        // Pre-initialize columns with empty arrays for tables with 0 rows
+        // This prevents "Cannot read properties of undefined" errors
+        if (Number(metadata.num_rows) === 0) {
+            for (const schemaElement of metadata.schema) {
+                if (schemaElement.name && schemaElement.type !== undefined) {
+                    r[schemaElement.name] = ctor ? new ctor(0) : [];
+                }
+            }
+            return;
+        }
+        
         await parquetRead({
             file,
             compressors,

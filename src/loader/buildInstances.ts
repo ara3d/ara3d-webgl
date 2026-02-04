@@ -30,6 +30,10 @@ export function buildInstances(bg: BimGeometry): Array<Instance> {
         if (flag & 0x1) continue;
 
         const geometry = geometries[meshIndex];
+        
+        // Skip instances with missing geometry (meshes with 0 vertices/indices)
+        if (!geometry) continue;
+        
         const material = materials[bg.InstanceMaterialIndex[i]];
         const transform = transforms[bg.InstanceTransformIndex[i]];
         const entity = bg.InstanceEntityIndex[i] as EntityIndex;
