@@ -23,7 +23,7 @@ export class BimData
     ThreeGeometry: THREE.Group;
     Resolver: BimResolver;
     Query: BimQuery;
-    Instances: Array<Instance>;
+    Instances: Array<Instance | undefined>;
     
     Descriptors: BimParameterDescriptors
     IntegerParameters: BimParameterTable;
@@ -35,7 +35,7 @@ export class BimData
     /** Options used when building geometry (stored for rebuildGeometry) */
     geometryOptions: BuildGeometryOptions = { applyZUpToYUpRotation: true };
 
-    rebuildGeometry(instances: Instance[]): THREE.Group
+    rebuildGeometry(instances: Array<Instance | undefined>): THREE.Group
     {
        return buildGeometry(instances, this.geometryOptions);
     }

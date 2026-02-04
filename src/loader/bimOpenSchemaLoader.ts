@@ -103,11 +103,20 @@ export async function loadBimGeometryFromZip(zip: JSZip): Promise<BimData> {
             onChunk(chunk: ColumnData) {
                 let data = chunk.columnData;
 
-                // Convert everything except explicit BigInt64Array
-                // Which happens for the "long" value that is encoded 
-                if (ctor && data.constructor.name != ctor.name && !(data instanceof BigInt64Array)) {
+                if (data instanceof BigInt64Array) {
+                    if (ctor === Int32Array) {
+                        data = Int32Array.from(data, (v) => Number(v));
+                    } else if (ctor === Float32Array) {
+                        data = Float32Array.from(data, (v) => Number(v));
+                    } else if (ctor === Uint32Array) {
+                        data = Uint32Array.from(data, (v) => Number(v));
+                    } else {
+                        data = Array.from(data, (v) => Number(v));
+                    }
+                } else if (ctor && data.constructor.name != ctor.name) {
                     data = new ctor(data);
                 }
+
                 r[chunk.columnName] = data;
             },
         });

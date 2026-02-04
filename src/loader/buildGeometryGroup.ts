@@ -16,7 +16,10 @@ export interface BuildGeometryOptions {
     applyZUpToYUpRotation?: boolean;
 }
 
-export function buildGeometry(instances: Instance[], options?: BuildGeometryOptions): THREE.Group {
+export function buildGeometry(
+    instances: Array<Instance | undefined>,
+    options?: BuildGeometryOptions
+): THREE.Group {
     console.time('Building geometry');
     const root = new THREE.Group();
 
@@ -168,10 +171,11 @@ export function mergeGeometries(geometries: Array<THREE.BufferGeometry>)
     return { geometry: mergedGeom, triToInstanceIndex };
 }
 
-function groupInstances(instances: Instance[]): GroupedInstances {
+function groupInstances(instances: Array<Instance | undefined>): GroupedInstances {
   const groups: GroupedInstances = new Map();
 
   for (const inst of instances) {
+    if (!inst) continue;
     let matGroup = groups.get(inst.material);
     if (!matGroup) {
       matGroup = new Map();
