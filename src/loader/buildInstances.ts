@@ -12,13 +12,13 @@ export type Instance = {
     transform: THREE.Matrix4;
 };
 
-export function buildInstances(bg: BimGeometry): Array<Instance> {
+export function buildInstances(bg: BimGeometry): Array<Instance | undefined> {
     console.time("Building instances");
     const transforms = computeTransforms(bg);
     const geometries = computeMeshGeometries(bg);
     const materials = computeMaterials(bg);
     const instanceCount = bg.InstanceMeshIndex.length;
-    const instances = [];
+    const instances = new Array<Instance | undefined>(instanceCount);
     const identity = new THREE.Matrix4;
     for (let i = 0; i < instanceCount; i++) {        
         const meshIndex = bg.InstanceMeshIndex[i];        
@@ -30,19 +30,23 @@ export function buildInstances(bg: BimGeometry): Array<Instance> {
         if (flag & 0x1) continue;
 
         const geometry = geometries[meshIndex];
+        
+        // Skip instances with missing geometry (meshes with 0 vertices/indices)
+        if (!geometry) continue;
+        
         const material = materials[bg.InstanceMaterialIndex[i]];
         const transform = transforms[bg.InstanceTransformIndex[i]];
         const entity = bg.InstanceEntityIndex[i] as EntityIndex;
         const isIdentity = transform.equals(identity);
         
-        instances.push({
+        instances[i] = {
             instance: i as InstanceIndex,
             geometry,
             material,
             transform,
             entity,
             isIdentity
-        });
+        };
     }
     console.timeEnd("Building instances");
     return instances;

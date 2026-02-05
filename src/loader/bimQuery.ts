@@ -14,6 +14,7 @@ export class BimQuery {
     FuncToInstances(f: (i: Instance) => string): Map<string, Instance[]> {
         const r = new Map<string, Instance[]>();
         for (const i of this.Resolver.Data.Instances) {
+            if (!i) continue;
             const s = f(i);
             let list = r.get(s);
             if (!list) r.set(s, [i]);
