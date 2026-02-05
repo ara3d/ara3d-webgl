@@ -99,21 +99,16 @@ export async function loadBimGeometryFromZip(zip: JSZip, options: BimLoaderOptio
             metadata,
             onChunk(chunk: ColumnData) {
                 let data = chunk.columnData;
+                
+                // Hyparquet can return INT64 as a plain array of bigint values
+                // (not a BigInt64Array), so probe the first element instead.
+                // !(data instanceof BigInt64Array) does not catch this.
+                const firstValue = data?.length ? (data as any)[0] : undefined;
+                const isBigIntArray = typeof firstValue === 'bigint';
 
-                if (data instanceof BigInt64Array) {
-                    if (ctor === Int32Array) {
-                        data = Int32Array.from(data, (v) => Number(v));
-                    } else if (ctor === Float32Array) {
-                        data = Float32Array.from(data, (v) => Number(v));
-                    } else if (ctor === Uint32Array) {
-                        data = Uint32Array.from(data, (v) => Number(v));
-                    } else {
-                        data = Array.from(data, (v) => Number(v));
-                    }
-                } else if (ctor && data.constructor.name != ctor.name) {
+                if (ctor && data.constructor.name != ctor.name && !isBigIntArray) {
                     data = new ctor(data);
                 }
-
                 r[chunk.columnName] = data;
             },
         });
