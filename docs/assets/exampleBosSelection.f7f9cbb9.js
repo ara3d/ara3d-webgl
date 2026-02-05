@@ -1,5 +1,5 @@
 import { V as Viewer, aw as Raycaster, w as MeshStandardMaterial, i as Vector2 } from "./compressors.ca4e4f79.js";
-import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.a98820ad.js";
+import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.180bc89b.js";
 async function runExample() {
   const viewer = new Viewer();
   const loader = new BimOpenSchemaLoader();
@@ -179,4 +179,4 @@ async function runExample() {
   console.log("Viewport selection example ready. Click on objects to select them.");
 }
 runExample();
-//# sourceMappingURL=exampleBosSelection.b7dd5554.js.map
+//# sourceMappingURL=exampleBosSelection.f7f9cbb9.js.map

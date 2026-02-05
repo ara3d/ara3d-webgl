@@ -2274,9 +2274,13 @@ class BimResolver {
     this.InstanceCount = this.BimGeometry.InstanceEntityIndex.length;
     this.EntityCount = this.Entities.Category.length;
     this.Descriptors = Data.Descriptors;
-    this.DescriptorCount = this.Descriptors.Name.length;
-    console.time("Computing parameters");
+    this.DescriptorCount = 0;
     this.ParameterMap = /* @__PURE__ */ new Map();
+    if (!this.Descriptors) {
+      return;
+    }
+    console.time("Computing parameters");
+    this.DescriptorCount = this.Descriptors.Name.length;
     this.ProcessParameters(Data.IntegerParameters);
     this.ProcessParameters(Data.SingleParameters);
     this.ProcessParameters(Data.StringParameters);
@@ -2397,10 +2401,6 @@ class BimQuery {
     __publicField(this, "Resolver");
     this.Data = Data;
     this.Resolver = new BimResolver(Data);
-    let levelDesc = this.Resolver.FindDescriptor("Rvt:Element:Level");
-    console.log("The level descriptor is ", levelDesc);
-    let table = Data.EntityParameters;
-    table.Descriptor;
   }
   FuncToInstances(f) {
     const r = /* @__PURE__ */ new Map();
@@ -2439,7 +2439,7 @@ class BimQuery {
   }
 }
 class BimOpenSchemaLoader {
-  async load(source) {
+  async load(source, options) {
     const response = await fetch(source);
     if (!response.ok) {
       throw new Error(
@@ -2448,7 +2448,7 @@ class BimOpenSchemaLoader {
     }
     const arrayBuffer = await response.arrayBuffer();
     const zip = await JSZip.loadAsync(arrayBuffer);
-    const bimData = await loadBimGeometryFromZip(zip);
+    const bimData = await loadBimGeometryFromZip(zip, options);
     bimData.Instances = buildInstances(bimData.BimGeometry);
     bimData.Query = new BimQuery(bimData);
     bimData.Resolver = bimData.Query.Resolver;
@@ -2456,7 +2456,7 @@ class BimOpenSchemaLoader {
     return bimData;
   }
 }
-async function loadBimGeometryFromZip(zip) {
+async function loadBimGeometryFromZip(zip, options) {
   function findFileEndingWith(suffix) {
     const lowerSuffix = suffix.toLowerCase();
     const name = Object.keys(zip.files).find(
@@ -2494,12 +2494,14 @@ async function loadBimGeometryFromZip(zip) {
   await readParquetTable("Transforms", bg, Float32Array);
   bd.BimGeometry = bg;
   await readParquetTable("Entities", bd.Entities = {}, Int32Array);
-  await readParquetTable("Descriptors", bd.Descriptors = {});
-  await readParquetTable("IntegerParameters", bd.IntegerParameters = {}, Int32Array);
-  await readParquetTable("SingleParameters", bd.SingleParameters = {}, Int32Array);
-  await readParquetTable("StringParameters", bd.StringParameters = {}, Int32Array);
-  await readParquetTable("EntityParameters", bd.EntityParameters = {}, Int32Array);
-  await readParquetTable("PointParameters", bd.PointParameters = {}, Int32Array);
+  if (options && options.loadParameters) {
+    await readParquetTable("Descriptors", bd.Descriptors = {});
+    await readParquetTable("IntegerParameters", bd.IntegerParameters = {}, Int32Array);
+    await readParquetTable("SingleParameters", bd.SingleParameters = {}, Int32Array);
+    await readParquetTable("StringParameters", bd.StringParameters = {}, Int32Array);
+    await readParquetTable("EntityParameters", bd.EntityParameters = {}, Int32Array);
+    await readParquetTable("PointParameters", bd.PointParameters = {}, Int32Array);
+  }
   await readParquetTable("Strings", bd);
   return bd;
 }
@@ -2507,4 +2509,4 @@ export {
   BimOpenSchemaLoader as B,
   loadBimGeometryFromZip as l
 };
-//# sourceMappingURL=bimOpenSchemaLoader.a98820ad.js.map
+//# sourceMappingURL=bimOpenSchemaLoader.180bc89b.js.map

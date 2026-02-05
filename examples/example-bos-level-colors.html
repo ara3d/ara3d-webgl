@@ -224,7 +224,7 @@
       const loader = new ARA3D.BimOpenSchemaLoader();
 
       console.time('Loading .bos file');
-      bimData = await loader.load('/ara3d-webgl/Snowdon Towers Sample Architectural.bos');
+      bimData = await loader.load('/ara3d-webgl/Snowdon Towers Sample Architectural.bos', { loadParameters: true });
       console.timeEnd('Loading .bos file');
 
       levelToInstances = bimData.Query.LevelToInstances();
