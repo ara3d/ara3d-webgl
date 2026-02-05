@@ -3,7 +3,7 @@ import { BimGeometry } from './bimGeometry';
 import { Instance } from './buildInstances';
 import { BimResolver } from './bimResolver';
 import { BimQuery } from './bimQuery';
-import { buildGeometry, BuildGeometryOptions } from './buildGeometryGroup';
+import { buildGeometry } from './buildGeometryGroup';
 import { BimEntities } from './bimEntities';
 import { BimParameterTable } from './BimParameterTable';
 import { BimParameterDescriptors } from './BimParameterDescriptors';
@@ -32,12 +32,9 @@ export class BimData
     SingleParameters: BimParameterTable;
     PointParameters: BimParameterTable;
 
-    /** Options used when building geometry (stored for rebuildGeometry) */
-    geometryOptions: BuildGeometryOptions = { applyZUpToYUpRotation: true };
-
     rebuildGeometry(instances: Array<Instance | undefined>): THREE.Group
     {
-       return buildGeometry(instances, this.geometryOptions);
+       return buildGeometry(instances);
     }
 }
 

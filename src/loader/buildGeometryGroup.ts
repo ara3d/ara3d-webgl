@@ -8,18 +8,7 @@ type InstanceMaterialGroup = {
     instances: Array<Instance>;
 };
 
-export interface BuildGeometryOptions {
-    /**
-     * Whether to apply Z-up to Y-up rotation (-90° around X axis).
-     * Default: true
-     */
-    applyZUpToYUpRotation?: boolean;
-}
-
-export function buildGeometry(
-    instances: Array<Instance | undefined>,
-    options?: BuildGeometryOptions
-): THREE.Group {
+export function buildGeometry(instances: Array<Instance | undefined>): THREE.Group {
     console.time('Building geometry');
     const root = new THREE.Group();
 
@@ -39,11 +28,8 @@ export function buildGeometry(
         root.add(nim);
     }
 
-    // Convert Z-Up to Y-Up (for Revit BOS exports)
-    // IFC imports may already be in the correct orientation
-    if (options?.applyZUpToYUpRotation ?? true) {
-        root.rotation.x = -Math.PI / 2;
-    }
+    // Convert Z-Up to Y-Up (for BOS geometry)
+    root.rotation.x = -Math.PI / 2;
 
     console.timeEnd('Building geometry');
     return root;

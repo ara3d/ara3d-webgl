@@ -21,13 +21,6 @@ import { BimParameterTable } from './BimParameterTable';
  * Options for loading BOS files
  */
 export interface BosLoaderOptions {
-    /**
-     * Whether to apply Z-up to Y-up rotation.
-     * - true: Apply rotation (for Revit exports which are Z-up)
-     * - false: No rotation (for IFC imports which are already Y-up compatible)
-     * Default: true (for backwards compatibility with Revit BOS files)
-     */
-    applyZUpToYUpRotation?: boolean;
     skipDescriptorsAndParameters?: boolean;
 }
 
@@ -50,12 +43,7 @@ export class BimOpenSchemaLoader {
         bimData.Query = new BimQuery(bimData);
         bimData.Resolver = bimData.Query.Resolver;
         
-        // Store geometry options for rebuildGeometry
-        // Default to true for backwards compatibility with Revit BOS files
-        bimData.geometryOptions = { 
-            applyZUpToYUpRotation: options?.applyZUpToYUpRotation ?? true 
-        };
-        bimData.ThreeGeometry = buildGeometry(bimData.Instances, bimData.geometryOptions);
+        bimData.ThreeGeometry = buildGeometry(bimData.Instances);
         return bimData;
     }
 }
