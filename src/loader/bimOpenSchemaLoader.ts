@@ -40,6 +40,7 @@ export class BimOpenSchemaLoader {
         bimData.Instances = buildInstances(bimData.BimGeometry);
         bimData.Query = new BimQuery(bimData);
         bimData.Resolver = bimData.Query.Resolver;
+        
         bimData.ThreeGeometry = buildGeometry(bimData.Instances);
         return bimData;
     }
@@ -64,21 +65,48 @@ export async function loadBimGeometryFromZip(zip: JSZip, options: BimLoaderOptio
     async function readParquetTable(
         name: string,
         r: any,
-        ctor: any = undefined
+        ctor: any = undefined,
+        optional: boolean = false
     ) {
-        const entryName = findFileEndingWith(name + '.parquet');
+        let entryName: string | undefined;
+        try {
+            entryName = findFileEndingWith(name + '.parquet');
+        } catch (error) {
+            if (optional) return;
+            throw error;
+        }
+        if (!entryName) {
+            if (optional) return;
+            throw new Error(`Could not find "${name}.parquet" in zip archive.`);
+        }
         const file = await zip.files[entryName].async('arraybuffer');
         const metadata = await parquetMetadataAsync(file);
+        
+        // Pre-initialize columns with empty arrays for tables with 0 rows
+        // This prevents "Cannot read properties of undefined" errors
+        if (Number(metadata.num_rows) === 0) {
+            for (const schemaElement of metadata.schema) {
+                if (schemaElement.name && schemaElement.type !== undefined) {
+                    r[schemaElement.name] = ctor ? new ctor(0) : [];
+                }
+            }
+            return;
+        }
+        
         await parquetRead({
             file,
             compressors,
             metadata,
             onChunk(chunk: ColumnData) {
                 let data = chunk.columnData;
+                
+                // Hyparquet can return INT64 as a plain array of bigint values
+                // (not a BigInt64Array), so probe the first element instead.
+                // !(data instanceof BigInt64Array) does not catch this.
+                const firstValue = data?.length ? (data as any)[0] : undefined;
+                const isBigIntArray = typeof firstValue === 'bigint';
 
-                // Convert everything except explicit BigInt64Array
-                // Which happens for the "long" value that is encoded 
-                if (ctor && data.constructor.name != ctor.name && !(data instanceof BigInt64Array)) {
+                if (ctor && data.constructor.name != ctor.name && !isBigIntArray) {
                     data = new ctor(data);
                 }
                 r[chunk.columnName] = data;
@@ -98,7 +126,6 @@ export async function loadBimGeometryFromZip(zip: JSZip, options: BimLoaderOptio
     bd.BimGeometry = bg as BimGeometry;
     
     await readParquetTable('Entities', bd.Entities = {} as BimEntities, Int32Array);
-
     if (options && options.loadParameters)
     {
         await readParquetTable('Descriptors', bd.Descriptors = {} as BimParameterDescriptors);
@@ -108,7 +135,6 @@ export async function loadBimGeometryFromZip(zip: JSZip, options: BimLoaderOptio
         await readParquetTable('EntityParameters', bd.EntityParameters = {} as BimParameterTable, Int32Array);
         await readParquetTable('PointParameters', bd.PointParameters = {} as BimParameterTable, Int32Array);
     }
-
     await readParquetTable('Strings', bd);
     return bd;
 }
