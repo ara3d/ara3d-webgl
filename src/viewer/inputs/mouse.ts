@@ -10,7 +10,7 @@ type Modifier = 'ctrl' | 'shift' | 'none';
 export class MouseHandler extends InputHandler {
     private readonly _idleDelayMs = 150;
     zoomSpeed = 1;
-    panSpeed = 100;
+    panSpeed = 1;
     rotateSpeed = 1;
     orbitSpeed = 1;
 
@@ -178,7 +178,7 @@ export class MouseHandler extends InputHandler {
             case 'pan':
                 this.camera
                     .do()
-                    .move2(delta.multiplyScalar(this.panSpeed), 'XY');
+                    .move2(this.toPanDelta(delta).multiplyScalar(this.panSpeed), 'XY');
                 break;
             case 'zoom':
                 this.camera.do().zoom(1 + delta.y * this.zoomSpeed);
@@ -187,7 +187,7 @@ export class MouseHandler extends InputHandler {
     }
 
     private onMouseMiddleDrag(delta: THREE.Vector2) {
-        this.camera.do().move2(delta.multiplyScalar(100), 'XY');
+        this.camera.do().move2(this.toPanDelta(delta).multiplyScalar(this.panSpeed), 'XY');
     }
 
     private onMouseRightDrag(delta: THREE.Vector2) {
@@ -241,5 +241,20 @@ export class MouseHandler extends InputHandler {
 
     private getModifier(event: MouseEvent | WheelEvent) {
         return event.ctrlKey ? 'ctrl' : event.shiftKey ? 'shift' : 'none';
+    }
+
+    /**
+     * Convert normalized screen drag to world-units pan delta.
+     * Uses the current camera frustum size at the orbit target so panning
+     * scales with zoom (intercept theorem).
+     */
+    private toPanDelta(delta: THREE.Vector2) {
+        const size = this.viewport.getSize();
+        const safeHeight = size.y === 0 ? 1 : size.y;
+        const aspect = size.x / safeHeight;
+        const frustumHalf = this.camera.frustrumSizeAt(this.camera.target);
+        const fullHeight = frustumHalf.y * 2;
+        const fullWidth = fullHeight * aspect;
+        return new THREE.Vector2(delta.x * fullWidth, delta.y * fullHeight);
     }
 }
