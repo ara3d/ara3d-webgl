@@ -13,7 +13,9 @@
     },
     "license": "MIT",
     "author": "Ara 3D <info@ara3d.com>",
-    "publishConfig": { "access": "public" },
+    "publishConfig": {
+        "access": "public"
+    },
     "repository": {
         "type": "git",
         "url": "git+https://github.com/ara3d/ara3d-webgl.git"

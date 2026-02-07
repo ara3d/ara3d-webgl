@@ -13,8 +13,8 @@ export class BimResolver
 {
     constructor(readonly Data: BimData) 
     {
-        this.Entities = Data.Entities;
-        this.Strings = Data.Strings;
+        this.Entities = Data.Entities ?? ({} as BimEntities);
+        this.Strings = Data.Strings ?? [];
         this.BimGeometry = Data.BimGeometry;
         this.InstanceCount = this.BimGeometry.InstanceEntityIndex.length;
         this.EntityCount = this.Entities.Category.length;
@@ -56,6 +56,7 @@ export class BimResolver
 
     ProcessParameters(table: BimParameterTable)
     {
+        if (!table || !table.Value || !table.Descriptor || !table.Entity) return;
         for (let i=0; i < table.Value.length; i++)
         {
             let descIndex = table.Descriptor[i];

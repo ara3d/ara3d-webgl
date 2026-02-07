@@ -8,7 +8,7 @@ type InstanceMaterialGroup = {
     instances: Array<Instance>;
 };
 
-export function buildGeometry(instances: Instance[]): THREE.Group {
+export function buildGeometry(instances: Array<Instance | undefined>): THREE.Group {
     console.time('Building geometry');
     const root = new THREE.Group();
 
@@ -28,7 +28,7 @@ export function buildGeometry(instances: Instance[]): THREE.Group {
         root.add(nim);
     }
 
-    // Convert Z-Up to Y-Up
+    // Convert Z-Up to Y-Up (for BOS geometry)
     root.rotation.x = -Math.PI / 2;
 
     console.timeEnd('Building geometry');
@@ -157,10 +157,11 @@ export function mergeGeometries(geometries: Array<THREE.BufferGeometry>)
     return { geometry: mergedGeom, triToInstanceIndex };
 }
 
-function groupInstances(instances: Instance[]): GroupedInstances {
+function groupInstances(instances: Array<Instance | undefined>): GroupedInstances {
   const groups: GroupedInstances = new Map();
 
   for (const inst of instances) {
+    if (!inst) continue;
     let matGroup = groups.get(inst.material);
     if (!matGroup) {
       matGroup = new Map();

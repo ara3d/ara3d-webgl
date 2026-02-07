@@ -1,7 +1,12 @@
-name: Publish Package
+name: Publish Package (@yschindel)
 
 on:
-    workflow_dispatch: # Manual trigger
+    workflow_dispatch: # Manual trigger from any branch
+        inputs:
+            branch:
+                description: 'Branch to publish from'
+                required: false
+                default: ''
     push:
         tags:
             - 'v*' # Also trigger on version tags (optional)
@@ -16,6 +21,8 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.inputs.branch || github.ref }}
 
             - name: Setup Node.js
               uses: actions/setup-node@v4
@@ -50,6 +57,17 @@ jobs:
                   echo "GitHub Context:"
                   echo "Repository: ${{ github.repository }}"
                   echo "Workflow: ${{ github.workflow }}"
+                  echo "Branch: $(git branch --show-current)"
+                  echo "Commit: $(git rev-parse HEAD)"
+
+            - name: Verify package.json scope
+              run: |
+                  PACKAGE_NAME=$(node -p "require('./package.json').name")
+                  echo "Publishing package: $PACKAGE_NAME"
+                  if [[ ! "$PACKAGE_NAME" =~ ^@yschindel/ ]]; then
+                    echo "⚠ WARNING: Package name is $PACKAGE_NAME, expected @yschindel/*"
+                    echo "This workflow is configured for @yschindel scope"
+                  fi
 
             - name: Check if package exists on npm
               run: |
