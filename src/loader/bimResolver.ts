@@ -35,6 +35,12 @@ export class BimResolver
         this.ProcessParameters(Data.StringParameters);
         this.ProcessParameters(Data.EntityParameters);
         console.timeEnd("Computing parameters");
+        let n = 0;
+        n = n + Data.IntegerParameters.Descriptor.length;
+        n = n + Data.SingleParameters.Descriptor.length;
+        n = n + Data.StringParameters.Descriptor.length;
+        n = n + Data.EntityParameters.Descriptor.length;
+        console.log("Found %d parameters and %d entitites", n, this.ParameterMap.size)
     }
 
     GetVal(rawVal: number, descType: number): any
