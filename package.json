@@ -49,10 +49,12 @@
     },
     "dependencies": {
         "@types/node": "^18.11.11",
+        "apache-arrow": "^21.1.0",
         "deepmerge": "^4.2.2",
         "hyparquet": "^1.23.0",
         "hyparquet-compressors": "^1.1.1",
         "jszip": "^3.10.1",
+        "parquet-wasm": "^0.7.1",
         "ste-events": "^3.0.7",
         "ste-signals": "^3.0.9",
         "ste-simple-events": "^3.0.7",
