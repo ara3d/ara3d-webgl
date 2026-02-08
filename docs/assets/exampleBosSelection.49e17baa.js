@@ -1,5 +1,5 @@
-import { V as Viewer, aw as Raycaster, w as MeshStandardMaterial, i as Vector2 } from "./compressors.ca4e4f79.js";
-import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.180bc89b.js";
+import { V as Viewer, aw as Raycaster, w as MeshStandardMaterial, i as Vector2 } from "./compressors.5793b060.js";
+import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.4bddc573.js";
 async function runExample() {
   const viewer = new Viewer();
   const loader = new BimOpenSchemaLoader();
@@ -43,6 +43,8 @@ async function runExample() {
   function rebuildGeometryWithSelection() {
     const instances = [];
     for (const instance of bimData.Instances) {
+      if (!instance)
+        continue;
       const globalId = bimData.Resolver.GetInstanceGlobalId(instance);
       if (selectedGlobalIds.has(globalId)) {
         instances.push(instance);
@@ -179,4 +181,4 @@ async function runExample() {
   console.log("Viewport selection example ready. Click on objects to select them.");
 }
 runExample();
-//# sourceMappingURL=exampleBosSelection.f7f9cbb9.js.map
+//# sourceMappingURL=exampleBosSelection.49e17baa.js.map

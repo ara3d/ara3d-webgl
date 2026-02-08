@@ -35593,7 +35593,7 @@ class MouseHandler extends InputHandler {
     super(viewer);
     __publicField(this, "_idleDelayMs", 150);
     __publicField(this, "zoomSpeed", 1);
-    __publicField(this, "panSpeed", 100);
+    __publicField(this, "panSpeed", 1);
     __publicField(this, "rotateSpeed", 1);
     __publicField(this, "orbitSpeed", 1);
     __publicField(this, "_buttonDown");
@@ -35741,7 +35741,7 @@ class MouseHandler extends InputHandler {
         this.camera.do().rotate(this.toRotation(delta, this.rotateSpeed));
         break;
       case "pan":
-        this.camera.do().move2(delta.multiplyScalar(this.panSpeed), "XY");
+        this.camera.do().move2(this.toPanDelta(delta).multiplyScalar(this.panSpeed), "XY");
         break;
       case "zoom":
         this.camera.do().zoom(1 + delta.y * this.zoomSpeed);
@@ -35749,7 +35749,7 @@ class MouseHandler extends InputHandler {
     }
   }
   onMouseMiddleDrag(delta) {
-    this.camera.do().move2(delta.multiplyScalar(100), "XY");
+    this.camera.do().move2(this.toPanDelta(delta).multiplyScalar(this.panSpeed), "XY");
   }
   onMouseRightDrag(delta) {
     this.camera.do().rotate(this.toRotation(delta, this.rotateSpeed));
@@ -35759,6 +35759,15 @@ class MouseHandler extends InputHandler {
   }
   getModifier(event) {
     return event.ctrlKey ? "ctrl" : event.shiftKey ? "shift" : "none";
+  }
+  toPanDelta(delta) {
+    const size = this.viewport.getSize();
+    const safeHeight = size.y === 0 ? 1 : size.y;
+    const aspect2 = size.x / safeHeight;
+    const frustumHalf = this.camera.frustrumSizeAt(this.camera.target);
+    const fullHeight = frustumHalf.y * 2;
+    const fullWidth = fullHeight * aspect2;
+    return new Vector2(delta.x * fullWidth, delta.y * fullHeight);
   }
 }
 var dist = {};
@@ -44488,4 +44497,4 @@ export {
   PropertyBinding as y,
   BufferGeometry as z
 };
-//# sourceMappingURL=compressors.ca4e4f79.js.map
+//# sourceMappingURL=compressors.5793b060.js.map
