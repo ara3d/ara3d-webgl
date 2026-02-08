@@ -17,7 +17,7 @@ export class BimResolver
         this.Strings = Data.Strings ?? [];
         this.BimGeometry = Data.BimGeometry;
         this.InstanceCount = this.BimGeometry.InstanceEntityIndex.length;
-        this.EntityCount = this.Entities.Category.length;
+        this.EntityCount = this.Entities.Category == null ? 0 : this.Entities.Category.length;
         this.Descriptors = Data.Descriptors;
         this.DescriptorCount = 0;
         this.ParameterMap = new Map<EntityIndex, Array<Parameter>>();

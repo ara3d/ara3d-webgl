@@ -135,6 +135,7 @@ async function runExample() {
         const instances = [];
         
         for (const instance of bimData.Instances) {
+            if (!instance) continue;
             const globalId = bimData.Resolver.GetInstanceGlobalId(instance);
             if (selectedGlobalIds.has(globalId)) {
                 // Selected: keep original material

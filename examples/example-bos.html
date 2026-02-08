@@ -16,7 +16,8 @@ async function runExample() {
     const viewer = new ARA3D.Viewer();
     const loader = new ARA3D.BimOpenSchemaLoader();
     console.time('Loading .bos file');
-    const bimData = await loader.load('/ara3d-webgl/Snowdon Towers Sample Architectural.bos');
+    //const bimData = await loader.load('/ara3d-webgl/Snowdon Towers Sample Architectural.bos');
+    const bimData = await loader.load('/ara3d-webgl/snowdon-opt-geo.bos');
     console.timeEnd('Loading .bos file');
     let group = bimData.ThreeGeometry;
     viewer.add(group);
