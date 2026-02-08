@@ -47,14 +47,16 @@ export class Viewer {
         this.environment = new Environment(this.settings);
         this.environment.getObjects().forEach((o) => this.renderer.add(o));
         this.inputs.registerAll();
+        this.camera.onMoved.subscribe(() => this.requestRender());
+        this.camera.onValueChanged.sub(() => this.requestRender());
+        this.viewport.onResize.subscribe(() => this.requestRender());
         this.start();
     }
 
     start() {
         if (this.running) return;
         this.running = true;
-        this.clock.start();
-        this.animate();
+        this.requestRender();
     }
 
     stop() {
@@ -63,20 +65,45 @@ export class Viewer {
             cancelAnimationFrame(this.updateId);
             this.updateId = null;
         }
+        this.clock.stop();
     }
 
+    // Invalidation-driven render loop:
+    // requestRender schedules a single frame; animate decides whether to keep
+    // scheduling based on camera/scene changes and stops the clock when idle.
+    requestRender() {
+        if (!this.running) return;
+        if (this.updateId !== null) return;
+        if (!this.clock.running) {
+            this.clock.start();
+            this.clock.getDelta();
+        }
+        this.updateId = requestAnimationFrame(this.animate);
+    }
+
+    // Single-frame tick: update camera, render if needed, and reschedule if
+    // camera/scene changes are still in progress (e.g. lerp or input).
     private animate = () => {
         if (!this.running) return;
-        this.updateId = requestAnimationFrame(this.animate);
+        this.updateId = null;
         const dt = this.clock.getDelta();
         const camChanged = this.camera.update(dt);
-        this.renderer.needsUpdate = this.renderer.needsUpdate || camChanged;
+        if (camChanged) {
+            this.renderer.needsUpdate = true;
+        }
         this.renderer.render();
+        if (camChanged || this.renderer.needsUpdate) {
+            this.requestRender();
+        } else {
+            this.clock.stop();
+        }
     };
 
+    // Mark scene dirty and schedule a render for new content.
     add(obj: THREE.Object3D, frameCamera = true) {
         console.log('Adding object');
         this.renderer.needsUpdate = true;
+        this.requestRender();
         if (!this.renderer.add(obj)) {
             throw new Error('Could not load object');
         }
@@ -85,11 +112,14 @@ export class Viewer {
     remove(obj: THREE.Object3D) {
         console.log('Removing object');
         this.renderer.needsUpdate = true;
+        this.requestRender();
         this.renderer.remove(obj);
     }
 
+    // Clear scene content and ensure a render happens for the empty state.
     clear() {
         this.renderer.clear();
+        this.requestRender();
     }
 
     dispose() {

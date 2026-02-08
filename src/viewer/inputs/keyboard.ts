@@ -206,6 +206,7 @@ export class KeyboardHandler extends InputHandler {
         move.multiplyScalar(speed);
         if (this.arrowsEnabled) {
             this.camera.localVelocity = move;
+            this._viewer.requestRender();
         }
     }
 }

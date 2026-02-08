@@ -67,6 +67,7 @@ export class CameraMovementDo extends CameraMovement {
         this._camera.target.copy(target);
         this._camera.camPerspective.camera.lookAt(target);
         this._camera.camPerspective.camera.up.set(0, 1, 0);
+        this._camera.notifyMovement();
     }
 
     private lockVector(position: THREE.Vector3, fallback: THREE.Vector3) {
