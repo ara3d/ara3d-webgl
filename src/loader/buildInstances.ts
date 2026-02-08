@@ -10,25 +10,23 @@ export type Instance = {
     geometry: THREE.BufferGeometry;
     material: THREE.Material;
     transform: THREE.Matrix4;
+    visible: boolean;
 };
 
-export function buildInstances(bg: BimGeometry): Array<Instance | undefined> {
+export function buildInstances(bg: BimGeometry): Array<Instance> {
     console.time("Building instances");
     const transforms = computeTransforms(bg);
     const geometries = computeMeshGeometries(bg);
     const materials = computeMaterials(bg);
     const instanceCount = bg.InstanceMeshIndex.length;
-    const instances = new Array<Instance | undefined>(instanceCount);
+    const instances = [];
+
     const identity = new THREE.Matrix4;
     for (let i = 0; i < instanceCount; i++) {        
         const meshIndex = bg.InstanceMeshIndex[i];        
         if (meshIndex < 0) continue;
 
-        const flag = bg.InstanceFlags[i];
-
-        // Check if the "hidden" flag is set. 
-        if (flag & 0x1) continue;
-
+        const visible = !(bg.InstanceFlags[i] & 0x1);
         const geometry = geometries[meshIndex];
         
         // Skip instances with missing geometry (meshes with 0 vertices/indices)
@@ -39,14 +37,15 @@ export function buildInstances(bg: BimGeometry): Array<Instance | undefined> {
         const entity = bg.InstanceEntityIndex[i] as EntityIndex;
         const isIdentity = transform.equals(identity);
         
-        instances[i] = {
+        instances.push({
             instance: i as InstanceIndex,
             geometry,
             material,
             transform,
             entity,
-            isIdentity
-        };
+            isIdentity,
+            visible
+        });
     }
     console.timeEnd("Building instances");
     return instances;

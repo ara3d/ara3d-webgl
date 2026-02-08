@@ -23,7 +23,7 @@ export class BimData
     ThreeGeometry: THREE.Group;
     Resolver: BimResolver;
     Query: BimQuery;
-    Instances: Array<Instance | undefined>;
+    Instances: Array<Instance>;
     
     Descriptors: BimParameterDescriptors
     IntegerParameters: BimParameterTable;
@@ -32,7 +32,7 @@ export class BimData
     SingleParameters: BimParameterTable;
     PointParameters: BimParameterTable;
 
-    rebuildGeometry(instances: Array<Instance | undefined>): THREE.Group
+    rebuildGeometry(instances: Array<Instance>): THREE.Group
     {
        return buildGeometry(instances);
     }

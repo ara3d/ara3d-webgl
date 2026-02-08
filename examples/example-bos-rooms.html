@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Room and DataGrid Example</title>
+  <link rel="stylesheet" href="./style.css" />
+  
+</head>
+<body>
+  <script type="module">
+import * as ARA3D from '../src/index';
+import { showParameterGrid } from './parameterGrid.js';
+import { showGradientChooser } from "./gradientChooser.js";
+import * as THREE from 'three';
+
+async function runExample() {
+    const viewer = new ARA3D.Viewer();
+    const loader = new ARA3D.BimOpenSchemaLoader();
+    console.time('Loading .bos file');
+    const bimData = await loader.load('/ara3d-webgl/Snowdon Towers Sample Architectural.bos', { loadParameters: true });
+    console.timeEnd('Loading .bos file');
+    const instances = bimData.Instances;
+    const r = bimData.Resolver;
+    for (const i of instances) 
+    {
+        /*
+        Here is the type information of an instance. 
+        export type Instance = {
+            isIdentity: boolean;
+            instance: InstanceIndex;
+            entity: EntityIndex;
+            geometry: THREE.BufferGeometry;
+            material: THREE.Material;
+            transform: THREE.Matrix4;
+            visible: boolean;
+        };
+        */
+        i.visible = r.GetInstanceCategoryName(i) == "Rooms";
+        if (i.visible)
+        {
+            /*
+                Parameters is an array of parameter values:
+                export type Parameter = { Name: string, Value: any }
+            */
+            const parameters = r.ParameterMap.get(i.entity);
+            const roomName = r.GetInstanceName(i);
+            console.log("Room " + roomName)
+            console.log(parameters);
+        }
+    }
+    
+    // Create the grid
+    showParameterGrid({
+        instances,
+        resolver: r,
+        onCellSelected: (rowIndex, info) => {
+        console.log("Selected:", rowIndex, info.parameterName, info.parameter);
+        // You can also use info.entity / info.instance here to highlight the room in 3D, etc.
+        },
+        onCellEdited: (rowIndex, info) => {
+        console.log("Edited:", rowIndex, info.parameterName, info.oldValue, "->", info.newValue);
+        // Optional: push changes back into your own data model
+        // (I do not mutate resolver.ParameterMap, because it may be derived/immutable in your pipeline.)
+        },
+        panelTitle: "Room Parameters",
+        panelWidthPx: 560,
+    });
+    
+    const group = bimData.rebuildGeometry(instances);
+    viewer.add(group);
+}
+
+runExample();
+  </script> 
+</body>
+</html>

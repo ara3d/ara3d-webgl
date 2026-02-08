@@ -8,7 +8,7 @@ type InstanceMaterialGroup = {
     instances: Array<Instance>;
 };
 
-export function buildGeometry(instances: Array<Instance | undefined>): THREE.Group {
+export function buildGeometry(instances: Array<Instance>): THREE.Group {
     console.time('Building geometry');
     const root = new THREE.Group();
 
@@ -157,11 +157,13 @@ export function mergeGeometries(geometries: Array<THREE.BufferGeometry>)
     return { geometry: mergedGeom, triToInstanceIndex };
 }
 
-function groupInstances(instances: Array<Instance | undefined>): GroupedInstances {
+function groupInstances(instances: Array<Instance>): GroupedInstances {
   const groups: GroupedInstances = new Map();
 
-  for (const inst of instances) {
-    if (!inst) continue;
+  for (const inst of instances) 
+  {
+    if (!inst.visible)
+        continue;
     let matGroup = groups.get(inst.material);
     if (!matGroup) {
       matGroup = new Map();
