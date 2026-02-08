@@ -20,7 +20,6 @@ export class Viewer {
     updateId: number | null = null;
     clock = new THREE.Clock();
     scene = new THREE.Scene();
-    private _isIdle = true;
 
     constructor(options?: PartialSettings) {
         this.settings = getSettings(options);
@@ -57,7 +56,6 @@ export class Viewer {
     start() {
         if (this.running) return;
         this.running = true;
-        this.clock.start();
         this.requestRender();
     }
 
@@ -67,18 +65,24 @@ export class Viewer {
             cancelAnimationFrame(this.updateId);
             this.updateId = null;
         }
+        this.clock.stop();
     }
 
+    // Invalidation-driven render loop:
+    // requestRender schedules a single frame; animate decides whether to keep
+    // scheduling based on camera/scene changes and stops the clock when idle.
     requestRender() {
         if (!this.running) return;
         if (this.updateId !== null) return;
-        if (this._isIdle) {
+        if (!this.clock.running) {
+            this.clock.start();
             this.clock.getDelta();
-            this._isIdle = false;
         }
         this.updateId = requestAnimationFrame(this.animate);
     }
 
+    // Single-frame tick: update camera, render if needed, and reschedule if
+    // camera/scene changes are still in progress (e.g. lerp or input).
     private animate = () => {
         if (!this.running) return;
         this.updateId = null;
@@ -91,10 +95,11 @@ export class Viewer {
         if (camChanged || this.renderer.needsUpdate) {
             this.requestRender();
         } else {
-            this._isIdle = true;
+            this.clock.stop();
         }
     };
 
+    // Mark scene dirty and schedule a render for new content.
     add(obj: THREE.Object3D, frameCamera = true) {
         console.log('Adding object');
         this.renderer.needsUpdate = true;
@@ -111,6 +116,7 @@ export class Viewer {
         this.renderer.remove(obj);
     }
 
+    // Clear scene content and ensure a render happens for the empty state.
     clear() {
         this.renderer.clear();
         this.requestRender();
