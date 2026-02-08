@@ -49,6 +49,7 @@ export class CameraLerp extends CameraMovement {
             this.onProgress = undefined;
         }
         this.onProgress?.(t);
+        this._camera.notifyMovement();
     }
 
     override move3(vector: THREE.Vector3): void {

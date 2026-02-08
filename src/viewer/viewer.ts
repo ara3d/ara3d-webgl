@@ -20,6 +20,7 @@ export class Viewer {
     updateId: number | null = null;
     clock = new THREE.Clock();
     scene = new THREE.Scene();
+    private _isIdle = true;
 
     constructor(options?: PartialSettings) {
         this.settings = getSettings(options);
@@ -47,6 +48,9 @@ export class Viewer {
         this.environment = new Environment(this.settings);
         this.environment.getObjects().forEach((o) => this.renderer.add(o));
         this.inputs.registerAll();
+        this.camera.onMoved.subscribe(() => this.requestRender());
+        this.camera.onValueChanged.sub(() => this.requestRender());
+        this.viewport.onResize.subscribe(() => this.requestRender());
         this.start();
     }
 
@@ -54,7 +58,7 @@ export class Viewer {
         if (this.running) return;
         this.running = true;
         this.clock.start();
-        this.animate();
+        this.requestRender();
     }
 
     stop() {
@@ -65,18 +69,36 @@ export class Viewer {
         }
     }
 
+    requestRender() {
+        if (!this.running) return;
+        if (this.updateId !== null) return;
+        if (this._isIdle) {
+            this.clock.getDelta();
+            this._isIdle = false;
+        }
+        this.updateId = requestAnimationFrame(this.animate);
+    }
+
     private animate = () => {
         if (!this.running) return;
-        this.updateId = requestAnimationFrame(this.animate);
+        this.updateId = null;
         const dt = this.clock.getDelta();
         const camChanged = this.camera.update(dt);
-        this.renderer.needsUpdate = this.renderer.needsUpdate || camChanged;
+        if (camChanged) {
+            this.renderer.needsUpdate = true;
+        }
         this.renderer.render();
+        if (camChanged || this.renderer.needsUpdate) {
+            this.requestRender();
+        } else {
+            this._isIdle = true;
+        }
     };
 
     add(obj: THREE.Object3D, frameCamera = true) {
         console.log('Adding object');
         this.renderer.needsUpdate = true;
+        this.requestRender();
         if (!this.renderer.add(obj)) {
             throw new Error('Could not load object');
         }
@@ -85,11 +107,13 @@ export class Viewer {
     remove(obj: THREE.Object3D) {
         console.log('Removing object');
         this.renderer.needsUpdate = true;
+        this.requestRender();
         this.renderer.remove(obj);
     }
 
     clear() {
         this.renderer.clear();
+        this.requestRender();
     }
 
     dispose() {

@@ -71,6 +71,7 @@ export class Renderer {
     render() {
         if (!this.needsUpdate && !this.camera.hasMoved) return;
         this.renderer.render(this.scene, this.camera.camPerspective.camera);
+        this.needsUpdate = false;
     }
 
     add(target: THREE.Object3D) {
