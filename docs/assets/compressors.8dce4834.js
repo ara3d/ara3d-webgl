@@ -34854,6 +34854,7 @@ class CameraLerp extends CameraMovement {
       this.onProgress = void 0;
     }
     this.onProgress?.(t);
+    this._camera.notifyMovement();
   }
   move3(vector) {
     const v = vector.clone();
@@ -34980,6 +34981,7 @@ class CameraMovementDo extends CameraMovement {
     this._camera.target.copy(target);
     this._camera.camPerspective.camera.lookAt(target);
     this._camera.camPerspective.camera.up.set(0, 1, 0);
+    this._camera.notifyMovement();
   }
   lockVector(position, fallback) {
     const x = this._camera.allowedMovement.x === 0 ? fallback.x : position.x;
@@ -35447,6 +35449,7 @@ class KeyboardHandler extends InputHandler {
     move.multiplyScalar(speed);
     if (this.arrowsEnabled) {
       this.camera.localVelocity = move;
+      this._viewer.requestRender();
     }
   }
 }
@@ -36459,7 +36462,7 @@ class Viewport {
   }
   watchResize(timeout) {
     let timerId;
-    const onResize = () => {
+    const triggerResize = () => {
       if (timerId !== void 0) {
         clearTimeout(timerId);
         timerId = void 0;
@@ -36469,8 +36472,21 @@ class Viewport {
         this._onResize.dispatch();
       }, timeout);
     };
-    window.addEventListener("resize", onResize);
-    this._unregisterResize = () => window.removeEventListener("resize", onResize);
+    const onWindowResize = () => triggerResize();
+    window.addEventListener("resize", onWindowResize);
+    let resizeObserver;
+    const target = this.canvas.parentElement ?? this.canvas;
+    if (typeof ResizeObserver !== "undefined" && target) {
+      resizeObserver = new ResizeObserver(() => triggerResize());
+      resizeObserver.observe(target);
+    }
+    this._unregisterResize = () => {
+      window.removeEventListener("resize", onWindowResize);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+        resizeObserver = void 0;
+      }
+    };
   }
 }
 class Renderer {
@@ -36493,6 +36509,9 @@ class Renderer {
         Math.min(window.devicePixelRatio, maxPixelRatio)
       );
       this.renderer.setSize(size.x, size.y);
+      const canvas = this.viewport.canvas;
+      canvas.style.width = `${size.x}px`;
+      canvas.style.height = `${size.y}px`;
       this.needsUpdate = true;
     });
     this.viewport = viewport;
@@ -36531,6 +36550,7 @@ class Renderer {
     if (!this.needsUpdate && !this.camera.hasMoved)
       return;
     this.renderer.render(this.scene, this.camera.camPerspective.camera);
+    this.needsUpdate = false;
   }
   add(target) {
     this.scene.add(target);
@@ -36562,11 +36582,18 @@ class Viewer {
     __publicField(this, "animate", () => {
       if (!this.running)
         return;
-      this.updateId = requestAnimationFrame(this.animate);
+      this.updateId = null;
       const dt = this.clock.getDelta();
       const camChanged = this.camera.update(dt);
-      this.renderer.needsUpdate = this.renderer.needsUpdate || camChanged;
+      if (camChanged) {
+        this.renderer.needsUpdate = true;
+      }
       this.renderer.render();
+      if (camChanged || this.renderer.needsUpdate) {
+        this.requestRender();
+      } else {
+        this.clock.stop();
+      }
     });
     this.settings = getSettings(options);
     this.viewport = new Viewport(this.settings);
@@ -36589,14 +36616,16 @@ class Viewer {
     this.environment = new Environment(this.settings);
     this.environment.getObjects().forEach((o) => this.renderer.add(o));
     this.inputs.registerAll();
+    this.camera.onMoved.subscribe(() => this.requestRender());
+    this.camera.onValueChanged.sub(() => this.requestRender());
+    this.viewport.onResize.subscribe(() => this.requestRender());
     this.start();
   }
   start() {
     if (this.running)
       return;
     this.running = true;
-    this.clock.start();
-    this.animate();
+    this.requestRender();
   }
   stop() {
     this.running = false;
@@ -36604,21 +36633,34 @@ class Viewer {
       cancelAnimationFrame(this.updateId);
       this.updateId = null;
     }
+    this.clock.stop();
+  }
+  requestRender() {
+    if (!this.running)
+      return;
+    if (this.updateId !== null)
+      return;
+    if (!this.clock.running) {
+      this.clock.start();
+      this.clock.getDelta();
+    }
+    this.updateId = requestAnimationFrame(this.animate);
   }
   add(obj, frameCamera = true) {
-    console.log("Adding object");
     this.renderer.needsUpdate = true;
+    this.requestRender();
     if (!this.renderer.add(obj)) {
       throw new Error("Could not load object");
     }
   }
   remove(obj) {
-    console.log("Removing object");
     this.renderer.needsUpdate = true;
+    this.requestRender();
     this.renderer.remove(obj);
   }
   clear() {
     this.renderer.clear();
+    this.requestRender();
   }
   dispose() {
     cancelAnimationFrame(this.updateId);
@@ -44497,4 +44539,4 @@ export {
   PropertyBinding as y,
   BufferGeometry as z
 };
-//# sourceMappingURL=compressors.5793b060.js.map
+//# sourceMappingURL=compressors.8dce4834.js.map

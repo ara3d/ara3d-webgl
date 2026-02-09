@@ -1,5 +1,5 @@
-import { V as Viewer, w as MeshStandardMaterial } from "./compressors.5793b060.js";
-import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.4bddc573.js";
+import { V as Viewer, w as MeshStandardMaterial } from "./compressors.8dce4834.js";
+import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.ad41252a.js";
 function showFilter(name, filter, onChange) {
   if (!name || !filter) {
     const existing = document.getElementById("ara3d-filter-panel");
@@ -329,7 +329,7 @@ async function runExample() {
   const viewer = new Viewer();
   const loader = new BimOpenSchemaLoader();
   console.time("Loading .bos file");
-  const bimData = await loader.load("/ara3d-webgl/rac_basic_sample_project-2025.bos");
+  const bimData = await loader.load("/ara3d-webgl/Snowdon Towers Sample Architectural.bos");
   console.timeEnd("Loading .bos file");
   let group = bimData.ThreeGeometry;
   viewer.add(group);
@@ -351,6 +351,8 @@ async function runExample() {
     });
     for (let [name, checked] of map) {
       const list = catToInstances.get(name);
+      if (!list)
+        continue;
       if (checked) {
         for (let i = 0; i < list.length; i++)
           instances.push(list[i]);
@@ -375,4 +377,4 @@ async function runExample() {
   console.timeEnd("Creating filter");
 }
 runExample();
-//# sourceMappingURL=exampleBosFilters.2451d3c8.js.map
+//# sourceMappingURL=exampleBosFilters.69f1bcfc.js.map

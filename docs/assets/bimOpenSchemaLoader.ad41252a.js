@@ -4,7 +4,7 @@ var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
   return value;
 };
-import { W as Group, E as Mesh, z as BufferGeometry, B as BufferAttribute, I as InstancedMesh, ah as StaticDrawUsage, j as Matrix4, w as MeshStandardMaterial, C as Color, x as DoubleSide, k as Vector3, Q as Quaternion, ai as JSZip, aj as compressors } from "./compressors.5793b060.js";
+import { W as Group, E as Mesh, z as BufferGeometry, B as BufferAttribute, I as InstancedMesh, ah as StaticDrawUsage, j as Matrix4, w as MeshStandardMaterial, C as Color, x as DoubleSide, k as Vector3, Q as Quaternion, ai as JSZip, aj as compressors } from "./compressors.8dce4834.js";
 const ParquetTypes = [
   "BOOLEAN",
   "INT32",
@@ -2052,7 +2052,7 @@ function mergeGeometries(geometries) {
 function groupInstances(instances) {
   const groups = /* @__PURE__ */ new Map();
   for (const inst of instances) {
-    if (!inst)
+    if (!inst.visible)
       continue;
     let matGroup = groups.get(inst.material);
     if (!matGroup) {
@@ -2115,15 +2115,13 @@ function buildInstances(bg) {
   const geometries = computeMeshGeometries(bg);
   const materials = computeMaterials(bg);
   const instanceCount = bg.InstanceMeshIndex.length;
-  const instances = new Array(instanceCount);
+  const instances = [];
   const identity = new Matrix4();
   for (let i = 0; i < instanceCount; i++) {
     const meshIndex = bg.InstanceMeshIndex[i];
     if (meshIndex < 0)
       continue;
-    const flag = bg.InstanceFlags[i];
-    if (flag & 1)
-      continue;
+    const visible = !(bg.InstanceFlags[i] & 1);
     const geometry = geometries[meshIndex];
     if (!geometry)
       continue;
@@ -2131,14 +2129,15 @@ function buildInstances(bg) {
     const transform = transforms[bg.InstanceTransformIndex[i]];
     const entity = bg.InstanceEntityIndex[i];
     const isIdentity = transform.equals(identity);
-    instances[i] = {
+    instances.push({
       instance: i,
       geometry,
       material,
       transform,
       entity,
-      isIdentity
-    };
+      isIdentity,
+      visible
+    });
   }
   console.timeEnd("Building instances");
   return instances;
@@ -2417,8 +2416,6 @@ class BimQuery {
   FuncToInstances(f) {
     const r = /* @__PURE__ */ new Map();
     for (const i of this.Resolver.Data.Instances) {
-      if (!i)
-        continue;
       const s = f(i);
       let list = r.get(s);
       if (!list)
@@ -2494,12 +2491,7 @@ async function loadBimGeometryFromZip(zip, options) {
         return;
       throw new Error(`Could not find "${name}.parquet" in zip archive.`);
     }
-    const zipTimer = "Getting zip table " + entryName;
-    console.time(zipTimer);
     const file = await zip.files[entryName].async("arraybuffer");
-    console.timeEnd(zipTimer);
-    const parquetTimer = "Getting parquet data " + entryName;
-    console.time(parquetTimer);
     const metadata = await parquetMetadataAsync(file);
     if (Number(metadata.num_rows) === 0) {
       for (const schemaElement of metadata.schema) {
@@ -2523,9 +2515,9 @@ async function loadBimGeometryFromZip(zip, options) {
         r[chunk.columnName] = data;
       }
     });
-    console.timeEnd(parquetTimer);
   }
-  console.time("Reading parquet tables");
+  const parquetReadTimer = "Reading parquet tables";
+  console.time(parquetReadTimer);
   const bd = new BimData();
   const bg = {};
   await readParquetTable("Instances", bg, Int32Array);
@@ -2535,7 +2527,12 @@ async function loadBimGeometryFromZip(zip, options) {
   await readParquetTable("Materials", bg, Uint8Array);
   await readParquetTable("Transforms", bg, Float32Array);
   bd.BimGeometry = bg;
-  await readParquetTable("Entities", bd.Entities = {}, Int32Array, true);
+  await readParquetTable(
+    "Entities",
+    bd.Entities = {},
+    Int32Array,
+    true
+  );
   await readParquetTable("Strings", bd, null, true);
   if (options && options.loadParameters) {
     await readParquetTable("Descriptors", bd.Descriptors = {}, Int32Array);
@@ -2545,10 +2542,11 @@ async function loadBimGeometryFromZip(zip, options) {
     await readParquetTable("EntityParameters", bd.EntityParameters = {}, Int32Array);
     await readParquetTable("PointParameters", bd.PointParameters = {}, Int32Array);
   }
+  console.timeEnd(parquetReadTimer);
   return bd;
 }
 export {
   BimOpenSchemaLoader as B,
   loadBimGeometryFromZip as l
 };
-//# sourceMappingURL=bimOpenSchemaLoader.4bddc573.js.map
+//# sourceMappingURL=bimOpenSchemaLoader.ad41252a.js.map

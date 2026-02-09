@@ -4,9 +4,10 @@ var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
   return value;
 };
-import { t as three_module, D as DefaultInputScheme, K as KEYS, V as Viewer, g as getSettings } from "./compressors.5793b060.js";
-import { G as GltfLoader } from "./gltfLoader.7c91c860.js";
-import { B as BimOpenSchemaLoader, l as loadBimGeometryFromZip } from "./bimOpenSchemaLoader.4bddc573.js";
+import { t as three_module, D as DefaultInputScheme, K as KEYS, V as Viewer, g as getSettings } from "./compressors.8dce4834.js";
+import { G as GltfLoader } from "./gltfLoader.e2611924.js";
+import { B as BimOpenSchemaLoader, l as loadBimGeometryFromZip } from "./bimOpenSchemaLoader.ad41252a.js";
+import { D as DataTable } from "./DataTable.080f84a9.js";
 class GizmoOptions {
   constructor(init) {
     __publicField(this, "size", 84);
@@ -53,7 +54,8 @@ const ARA3D = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePropert
   getSettings,
   GltfLoader,
   BimOpenSchemaLoader,
-  loadBimGeometryFromZip
+  loadBimGeometryFromZip,
+  DataTable
 }, Symbol.toStringTag, { value: "Module" }));
 console.log(ARA3D);
-//# sourceMappingURL=input.7796208c.js.map
+//# sourceMappingURL=input.cc3d3319.js.map

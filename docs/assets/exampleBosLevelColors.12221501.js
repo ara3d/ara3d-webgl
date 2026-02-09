@@ -1,5 +1,5 @@
-import { V as Viewer, C as Color, w as MeshStandardMaterial, x as DoubleSide } from "./compressors.5793b060.js";
-import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.4bddc573.js";
+import { V as Viewer, C as Color, w as MeshStandardMaterial, x as DoubleSide } from "./compressors.8dce4834.js";
+import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.ad41252a.js";
 const paletteState = {
   saturation: 0.45,
   lightness: 0.2,
@@ -31,7 +31,7 @@ function buildInstancesWithMaterials() {
   const materialsByLevel = generateRandomMaterialsForMap(levelToInstances, paletteState);
   const instances = [];
   for (const [levelKey, instGroup] of levelToInstances) {
-    const material = materialsByLevel.get(levelKey);
+    let material = materialsByLevel.get(levelKey);
     if (!material)
       continue;
     for (const inst of instGroup) {
@@ -119,4 +119,4 @@ async function runExample() {
   rebuildSceneGeometry();
 }
 runExample();
-//# sourceMappingURL=exampleBosLevelColors.2e7df632.js.map
+//# sourceMappingURL=exampleBosLevelColors.12221501.js.map
