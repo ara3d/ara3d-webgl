@@ -15,7 +15,9 @@
     "./src/loader/bimResolver.ts",
     "./src/loader/bimQuery.ts",
     "./src/loader/bimEntities.ts",
-    "./src/loader/BimParameterTable.ts",
-    "./src/loader/BimParameterDescriptors.ts"
+    "src/loader/BimParameterValues.ts",
+    "./src/loader/BimParameterDescriptors.ts",
+    "./src/loader/DataTable.ts",
+    "./src/loader/Parameter.ts"
   ]
 }

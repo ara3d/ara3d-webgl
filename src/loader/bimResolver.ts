@@ -2,12 +2,9 @@ import { BimData, StringIndex, EntityIndex, InstanceIndex, DescriptorIndex } fro
 import { BimEntities } from './bimEntities';
 import { BimGeometry } from './bimGeometry';
 import { BimParameterDescriptors } from './BimParameterDescriptors';
-import { BimParameterTable } from './BimParameterTable';
+import { BimParameterValues } from './BimParameterValues';
 import { Instance } from './buildInstances';
-
-// This class helps us efficiently look up data based on indices and a type-safe way. 
-
-export type Parameter = { Name: string, Value: any }
+import { Parameter } from './Parameter';
 
 export class BimResolver 
 {
@@ -54,7 +51,7 @@ export class BimResolver
         return rawVal;
     }
 
-    ProcessParameters(table: BimParameterTable)
+    ProcessParameters(table: BimParameterValues)
     {
         if (!table || !table.Value || !table.Descriptor || !table.Entity) return;
         for (let i=0; i < table.Value.length; i++)

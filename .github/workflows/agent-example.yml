@@ -1,0 +1,91 @@
+# Example: background agent that creates a branch and opens a PR
+#
+# Trigger: manually (workflow_dispatch) or on a schedule.
+# To let the agent merge: add a step that runs `gh pr merge` with a token
+# (see docs/AGENT_SETUP.md).
+#
+# You need:
+#   - Secret: AGENT_GITHUB_TOKEN (PAT or App token with repo + contents)
+#   - Optional: OPENAI_API_KEY or ANTHROPIC_API_KEY for LLM-based edits
+
+name: Agent (example – docs/tests/refactor)
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Agent task'
+        required: true
+        default: 'docs'
+        type: choice
+        options:
+          - docs
+          - tests
+          - review
+  # Uncomment to run on a schedule (e.g. weekly docs pass):
+  # schedule:
+  #   - cron: '0 2 * * 0'  # 02:00 UTC every Sunday
+
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+
+      - name: Create branch
+        run: |
+          BRANCH="agent/${{ github.event.inputs.task || 'docs' }}-$(date +%Y%m%d-%H%M)"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git checkout -b "$BRANCH"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+      # --- Placeholder: in a real setup you would here ---
+      # 1. Install deps (npm install), maybe run a script that:
+      # 2. Calls your LLM API with repo context + task prompt
+      # 3. Writes suggested file changes to disk
+      # 4. Run tests/lint (npm run build, etc.)
+      # --- For this example we only touch a small file to show the flow ---
+      - name: Dependencies
+        run: npm ci
+
+      - name: Agent task (placeholder)
+        run: |
+          # Replace this with your LLM-driven edits. Example: append a line to README
+          echo "" >> README.md
+          echo "<!-- Agent run: ${{ github.run_id }} -->" >> README.md
+
+      # - name: Optional – run LLM and apply edits (pseudo)
+      #   env:
+      #     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      #   run: |
+      #     node scripts/agent-apply-edits.js "${{ github.event.inputs.task }}"
+
+      - name: Build (ensure nothing is broken)
+        run: npm run build
+
+      - name: Push and open PR
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
+        run: |
+          git add -A
+          git diff --staged --quiet && exit 0 || true
+          git commit -m "Agent: ${{ github.event.inputs.task || 'docs' }} pass [automated]"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --base develop \
+            --head "$BRANCH" \
+            --title "Agent: ${{ github.event.inputs.task || 'docs' }} pass" \
+            --body "Automated run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      # Optional: enable auto-merge so GitHub merges when CI passes
+      # - name: Enable auto-merge
+      #   env:
+      #     GH_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
+      #   run: gh pr merge --auto --squash

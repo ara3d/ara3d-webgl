@@ -193,15 +193,12 @@ export async function showParameterGrid(opts) {
     resolver,
     roomCategoryName = "Rooms",
     panelTitle = "Room Parameters",
-    onCellSelected,
-    onCellEdited,
     initialGridWidthPx = 560,
     minColumnWidthPx = 160,
   } = opts ?? {};
 
   if (!instances || !resolver) throw new Error("showParameterGrid: instances + resolver are required.");
-  if (typeof onCellSelected !== "function") throw new Error("showParameterGrid: onCellSelected callback is required.");
-
+  
   const canvas = document.querySelector(".ara3d-canvas");
   if (!canvas) throw new Error("showParameterGrid: could not find .ara3d-canvas");
 
@@ -305,47 +302,6 @@ export async function showParameterGrid(opts) {
     },
     rowHeight: 28,
     headerHeight: 32,
-
-    cellClick: (e, cell) => {
-      const row = cell.getRow().getData();
-      const field = cell.getField(); // sanitized field
-      const col = cell.getColumn().getDefinition();
-      const paramName = col.title;   // original parameter name (or RoomName)
-
-      const rowIndex = row.__rowIndex;
-      const params = resolver.ParameterMap?.get(row.__entity) ?? [];
-      const param = (paramName === "RoomName")
-        ? { Name: "RoomName", Value: row.RoomName }
-        : (params.find(p => String(p.Name) === String(paramName)) ?? { Name: paramName, Value: row[field] });
-
-      onCellSelected(rowIndex, {
-        rowIndex,
-        entity: row.__entity,
-        instance: row.__instance,
-        parameterName: paramName,
-        parameter: param,
-        allParameters: params,
-        value: row[field],
-      });
-    },
-
-    cellEdited: (cell) => {
-      if (!onCellEdited) return;
-
-      const row = cell.getRow().getData();
-      const field = cell.getField();
-      const col = cell.getColumn().getDefinition();
-      const paramName = col.title;
-      const rowIndex = row.__rowIndex;
-
-      onCellEdited(rowIndex, {
-        rowIndex,
-        entity: row.__entity,
-        instance: row.__instance,
-        parameterName: paramName,
-        value: row[field],
-      });
-    },
   });
 
   // Simple filter: search RoomName + visible cells

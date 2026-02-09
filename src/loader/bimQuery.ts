@@ -1,5 +1,6 @@
 import { BimData, DescriptorIndex, InstanceIndex } from './bimData';
-import { BimResolver, Parameter } from './bimResolver';
+import { BimResolver } from './bimResolver';
+import { Parameter } from './Parameter';
 import { Instance } from './buildInstances';
 
 // This class helps us make queries about the BIM data. 

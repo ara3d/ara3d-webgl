@@ -15,7 +15,7 @@ import { BimData } from './bimData';
 import { BimEntities } from './bimEntities';
 import { BimQuery } from './bimQuery';
 import { BimParameterDescriptors } from './BimParameterDescriptors';
-import { BimParameterTable } from './BimParameterTable';
+import { BimParameterValues } from './BimParameterValues';
 
 type BimLoaderOptions =
 {
@@ -81,12 +81,12 @@ export async function loadBimGeometryFromZip(zip: JSZip, options: BimLoaderOptio
         }
 
         const zipTimer = "Getting zip table " + entryName;          
-        console.time(zipTimer);
+        //console.time(zipTimer);
         const file = await zip.files[entryName].async('arraybuffer');
-        console.timeEnd(zipTimer);
+        //console.timeEnd(zipTimer);
 
         const parquetTimer = "Getting parquet data " + entryName;  
-        console.time(parquetTimer);
+        //console.time(parquetTimer);
         const metadata = await parquetMetadataAsync(file);
         // Pre-initialize columns with empty arrays for tables with 0 rows
         // This prevents "Cannot read properties of undefined" errors
@@ -117,10 +117,11 @@ export async function loadBimGeometryFromZip(zip: JSZip, options: BimLoaderOptio
                 r[chunk.columnName] = data;
             },
         });
-        console.timeEnd(parquetTimer);
+        //console.timeEnd(parquetTimer);
     }
 
-    console.time('Reading parquet tables');
+    const parquetReadTimer = 'Reading parquet tables'; 
+    console.time(parquetReadTimer);
     const bd = new BimData();
     const bg = {};
     await readParquetTable('Instances', bg, Int32Array);
@@ -137,12 +138,13 @@ export async function loadBimGeometryFromZip(zip: JSZip, options: BimLoaderOptio
     if (options && options.loadParameters)
     {
         await readParquetTable('Descriptors', bd.Descriptors = {} as BimParameterDescriptors, Int32Array);
-        await readParquetTable('IntegerParameters', bd.IntegerParameters = {} as BimParameterTable, Int32Array);
-        await readParquetTable('SingleParameters', bd.SingleParameters = {} as BimParameterTable, Int32Array);
-        await readParquetTable('StringParameters', bd.StringParameters = {} as BimParameterTable, Int32Array);
-        await readParquetTable('EntityParameters', bd.EntityParameters = {} as BimParameterTable, Int32Array);
-        await readParquetTable('PointParameters', bd.PointParameters = {} as BimParameterTable, Int32Array);
+        await readParquetTable('IntegerParameters', bd.IntegerParameters = {} as BimParameterValues, Int32Array);
+        await readParquetTable('SingleParameters', bd.SingleParameters = {} as BimParameterValues, Int32Array);
+        await readParquetTable('StringParameters', bd.StringParameters = {} as BimParameterValues, Int32Array);
+        await readParquetTable('EntityParameters', bd.EntityParameters = {} as BimParameterValues, Int32Array);
+        await readParquetTable('PointParameters', bd.PointParameters = {} as BimParameterValues, Int32Array);
     }
 
+    console.timeEnd(parquetReadTimer);
     return bd;
 }

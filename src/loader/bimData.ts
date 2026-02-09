@@ -5,7 +5,7 @@ import { BimResolver } from './bimResolver';
 import { BimQuery } from './bimQuery';
 import { buildGeometry } from './buildGeometryGroup';
 import { BimEntities } from './bimEntities';
-import { BimParameterTable } from './BimParameterTable';
+import { BimParameterValues } from './BimParameterValues';
 import { BimParameterDescriptors } from './BimParameterDescriptors';
 
 // Type-safe indexers 
@@ -26,11 +26,11 @@ export class BimData
     Instances: Array<Instance>;
     
     Descriptors: BimParameterDescriptors
-    IntegerParameters: BimParameterTable;
-    StringParameters: BimParameterTable;
-    EntityParameters: BimParameterTable;
-    SingleParameters: BimParameterTable;
-    PointParameters: BimParameterTable;
+    IntegerParameters: BimParameterValues;
+    StringParameters: BimParameterValues;
+    EntityParameters: BimParameterValues;
+    SingleParameters: BimParameterValues;
+    PointParameters: BimParameterValues;
 
     rebuildGeometry(instances: Array<Instance>): THREE.Group
     {
