@@ -2,19 +2,133 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Room + DataGrid + Gradient Chooser</title>
+  <title>Ara 3D Rooms + Grid + Gradient</title>
   <link rel="stylesheet" href="./style.css" />
+  <style>
+    /* Full-screen split layout */
+    html, body { height: 100%; margin: 0; }
+    #app {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: row;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: #fff;
+    }
+    #leftPane {
+      flex: 1 1 auto;
+      min-width: 320px;
+      position: relative;
+      overflow: hidden;
+      background: #111;
+    }
+    #rightPane {
+      width: 560px;
+      min-width: 360px;
+      max-width: 75vw;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid rgba(0,0,0,0.12);
+      background: #fff;
+      overflow: hidden;
+    }
+    #divider {
+      width: 8px;
+      cursor: col-resize;
+      background: linear-gradient(to right, rgba(0,0,0,0.03), rgba(0,0,0,0.10), rgba(0,0,0,0.03));
+      user-select: none;
+      touch-action: none;
+    }
+    /* grid host should fill right pane */
+    #gridHost {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+    /* Make Ara canvas fill */
+    .ara3d-canvas, canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+  </style>
 </head>
 <body>
+  <!-- Split layout container -->
+  <div id="app">
+    <div id="leftPane"></div>
+    <div id="divider"></div>
+    <div id="rightPane">
+      <div id="gridHost"></div>
+    </div>
+  </div>
+
   <script type="module">
     import * as ARA3D from "../src/index";
-    import { showParameterGrid } from "./parameterGrid.js";
+    import { showParameterGrid } from "./parameterGrid.js";   // updated version that takes {host, dataTable,...}
     import { showGradientChooser } from "./gradientChooser.js";
     import * as THREE from "three";
 
-    async function runExample() 
-    {
+    function setupDividerResize() {
+      const app = document.getElementById("app");
+      const right = document.getElementById("rightPane");
+      const divider = document.getElementById("divider");
+
+      let dragging = false;
+      divider.addEventListener("pointerdown", (e) => {
+        dragging = true;
+        divider.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      });
+
+      divider.addEventListener("pointermove", (e) => {
+        if (!dragging) return;
+        const totalW = app.getBoundingClientRect().width;
+        const x = e.clientX;
+        const rightW = Math.max(360, Math.min(totalW * 0.75, totalW - x));
+        right.style.width = `${rightW}px`;
+      });
+
+      divider.addEventListener("pointerup", (e) => {
+        dragging = false;
+        try { divider.releasePointerCapture(e.pointerId); } catch {}
+      });
+    }
+
+    function waitForAraCanvas({ timeoutMs = 5000 } = {}) {
+      // Ara Viewer typically creates a canvas with class "ara3d-canvas" (based on your earlier code).
+      // We’ll poll briefly in case it’s created async.
+      const start = performance.now();
+      return new Promise((resolve, reject) => {
+        const tick = () => {
+          const canvas =
+            document.querySelector(".ara3d-canvas") ||
+            document.querySelector("canvas.ara3d-canvas") ||
+            document.querySelector("canvas");
+
+          if (canvas) return resolve(canvas);
+
+          if (performance.now() - start > timeoutMs) {
+            return reject(new Error("Could not find Ara 3D canvas element. (Expected .ara3d-canvas or a <canvas>.)"));
+          }
+          requestAnimationFrame(tick);
+        };
+        tick();
+      });
+    }
+
+    async function runExample() {
+      setupDividerResize();
+
+      const leftPane = document.getElementById("leftPane");
+      const gridHost = document.getElementById("gridHost");
+
+      // --- Create viewer (it will create its canvas somewhere in the DOM) ---
       const viewer = new ARA3D.Viewer();
+
+      // Move the viewer canvas into our left pane
+      const canvas = await waitForAraCanvas();
+      leftPane.appendChild(canvas);
+
       const loader = new ARA3D.BimOpenSchemaLoader();
 
       console.time("Loading .bos file");
@@ -27,37 +141,19 @@
       const instances = bimData.Instances;
       const r = bimData.Resolver;
 
-      // ---- Mark room visibility + collect room instances ----
+      // ---- Collect room instances ----
       const roomInstances = [];
-      const roomByEntity = new Map();
-
       for (const inst of instances) {
         inst.visible = r.GetInstanceCategoryName(inst) === "Rooms";
-        if (inst.visible) {
-          roomInstances.push(inst);
-          roomByEntity.set(inst.entity, inst);
-        }
+        if (inst.visible) roomInstances.push(inst);
       }
-
-      // ---- Build parameter name list for rooms ----
-      const paramNameSet = new Set();
-      for (const inst of roomInstances) {
-        const params = r.ParameterMap.get(inst.entity) ?? [];
-        for (const p of params) {
-          if (p?.Name != null) paramNameSet.add(String(p.Name));
-        }
-      }
-      const parameterNames = Array.from(paramNameSet).sort((a, b) => a.localeCompare(b));
 
       // ---- Viewer geometry group management (rebuild on demand) ----
       let currentGroup = null;
-
       function rebuild() {
         const newGroup = bimData.rebuildGeometry(instances);
 
         if (currentGroup) {
-          // Replace in viewer (Viewer API varies; remove from scene if needed)
-          // If viewer exposes remove(), use it. Otherwise, remove directly from scene if accessible.
           if (typeof viewer.remove === "function") viewer.remove(currentGroup);
           else if (viewer.scene && typeof viewer.scene.remove === "function") viewer.scene.remove(currentGroup);
         }
@@ -66,13 +162,8 @@
         viewer.add(currentGroup);
       }
 
-      // Initial build
-      rebuild();
-
-      // ---- Material creation + caching ----
-      // We create per-color materials and reuse them.
-      const materialCache = new Map(); // key: hex color "#RRGGBB" -> THREE.Material
-
+      // ---- Materials (cached) ----
+      const materialCache = new Map(); // "#RRGGBB" -> THREE.Material
       function getMaterialForColor(hexColor) {
         const key = String(hexColor);
         let m = materialCache.get(key);
@@ -88,7 +179,6 @@
         return m;
       }
 
-      // Apply colors to all visible room instances using values array aligned to roomInstances order
       function applyRoomColors(values, mapValueToColor) {
         for (let i = 0; i < roomInstances.length; i++) {
           const inst = roomInstances[i];
@@ -99,44 +189,106 @@
         rebuild();
       }
 
-      // Helper: get a value for a parameter from a room entity
-      function getRoomParamValue(entity, parameterName) {
-        const params = r.ParameterMap.get(entity) ?? [];
-        const p = params.find(x => String(x.Name) === parameterName);
-        return p?.Value ?? null;
+      // --------------------------------------------------------------------
+      // Build a DataTable from room parameters
+      // --------------------------------------------------------------------
+      const roomTable = new ARA3D.DataTable();
+      roomTable.exportNullForMissing = true;
+
+      roomTable.ensureColumn("__entity"); // stable id (recommended)
+      roomTable.ensureColumn("RoomName");
+
+      // Map entity -> rowIndex for stable edits even with sorting/filtering
+      const entityToRowIndex = new Map();
+
+      for (const inst of roomInstances) {
+        const entityKey = inst.entity;
+        const params = r.ParameterMap.get(inst.entity) ?? [];
+
+        const names = ["__entity", "RoomName"];
+        const values = [entityKey, (r.GetInstanceName(inst) ?? "")];
+
+        for (const p of params) {
+          if (!p?.Name) continue;
+          names.push(String(p.Name));
+          values.push(p.Value);
+        }
+
+        const rowIndex = roomTable.addRowFromNamesAndValues(names, values);
+        entityToRowIndex.set(entityKey, rowIndex);
       }
 
-      // Helper required by gradient chooser: values aligned to roomInstances order
       function getValuesForParameter(parameterName) {
-        return roomInstances.map(inst => {
-          if (parameterName === "RoomName") return r.GetInstanceName(inst) ?? "";
-          return getRoomParamValue(inst.entity, parameterName);
-        });
+        const col = roomTable.tryGetColumnFromName(parameterName);
+        if (!col) return roomInstances.map(_ => null);
+        return col.slice(); // aligned to roomInstances order because we added rows in that order
       }
 
-      console.log("Showing parameter grid");      
-      const { table, _ } = await showParameterGrid({
-        instances,
-        resolver: r,
-        panelTitle: "Room Parameters",
-        panelWidthPx: 560,
+      const parameterNames = roomTable
+        .getColumnNames()
+        .filter(n => n !== "__entity" && n !== "RoomName")
+        .sort((a, b) => a.localeCompare(b));
+
+      // --------------------------------------------------------------------
+      // Color state + refresh helper
+      // --------------------------------------------------------------------
+      let currentColoring = {
+        parameterName: "RoomName",
+        mapValueToColor: (v) => "#808080",
+      };
+
+      function refreshColorsFromCurrentChoice() {
+        const values = getValuesForParameter(currentColoring.parameterName);
+        applyRoomColors(values, currentColoring.mapValueToColor);
+      }
+
+      // --------------------------------------------------------------------
+      // Show parameter grid (right side), driven by DataTable
+      // --------------------------------------------------------------------
+      const grid = await showParameterGrid({
+        host: gridHost,
+        dataTable: roomTable,
+        title: "Room Parameters",
+        frozenColumns: ["RoomName"],
+        hiddenColumns: ["__entity"],
+        // IMPORTANT: use stable row key if your grid allows sorting/filtering.
+        // Our generic grid callback gives rowIndex based on current position,
+        // so we’ll map using __entity if it exists in rowData:
+        onCellEdited: ({ rowIndex, columnName, value, rowData }) => {
+          // Prefer stable mapping via __entity if available:
+          const entity = rowData?.__entity;
+          const stableRowIndex = (entity !== undefined && entityToRowIndex.has(entity))
+            ? entityToRowIndex.get(entity)
+            : rowIndex;
+
+          roomTable.setValue(stableRowIndex, columnName, value);
+
+          if (columnName === currentColoring.parameterName) {
+            refreshColorsFromCurrentChoice();
+          }
+        },
+        // You can also pass tabulatorOptions here if you want:
+        // tabulatorOptions: { ... }
       });
 
-      table.on("cellEdited", function(e, row) { 
-        // TODO: commit the data to para
-      });
+      // --------------------------------------------------------------------
+      // Initial build + Gradient chooser
+      // --------------------------------------------------------------------
+      rebuild();
 
-      // ---- Gradient chooser integration ----
       showGradientChooser({
         parameterNames: ["RoomName", ...parameterNames],
         getValuesForParameter,
         onChange: ({ parameterName, mapValueToColor, mode, order }) => {
-          const values = getValuesForParameter(parameterName);
           console.log("Color by:", parameterName, "mode:", mode, "order:", order);
-          applyRoomColors(values, mapValueToColor);
+          currentColoring.parameterName = parameterName;
+          currentColoring.mapValueToColor = mapValueToColor;
+          refreshColorsFromCurrentChoice();
         },
         title: "Color Rooms",
       });
+
+      refreshColorsFromCurrentChoice();
     }
 
     runExample();
