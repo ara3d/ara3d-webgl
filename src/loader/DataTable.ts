@@ -85,10 +85,13 @@ export class DataTable {
   public reorderColumns(names: Array<string>) {
     this._colNames = names;
     this._colIndex.clear();
+    const newCols = [];
     for (let i=0; i < this._colNames.length; i++)
     {
         this._colIndex.set(this._colNames[i], i);
+        newCols.push(this._columns[i]);
     }
+    this._columns = newCols;
   }
 
   public getColumnNames(): Array<string> {
@@ -253,38 +256,54 @@ export class DataTable {
     return result;
   }
 
-  /**
-   * Creates a view of the table with only selected rows/columns (copying data).
-   * Useful for "materializing" query results for UI/export.
-   */
-  public project(options: {
-    rows?: number[];          // default: all rows
-    columns?: string[];       // default: all columns
-  }): DataTable {
-    const rowIdx = options.rows ?? this.range(0, this._rowCount);
-    const colNames = options.columns ?? this._colNames.slice();
+ /**
+ * Creates a view of the table with only selected rows/columns (copying data).
+ * Useful for "materializing" query results for UI/export.
+ */
+public project(options: {
+  rows?: number[];          // default: all rows
+  columns?: string[];       // default: all columns
+}): DataTable {
+  const rowIdx = options.rows ?? this.range(0, this._rowCount);
 
-    const t = new DataTable();
-    t.exportNullForMissing = this.exportNullForMissing;
-    t.caseInsensitiveNames = this.caseInsensitiveNames;
+  // IMPORTANT: keep the caller's column order if provided.
+  // If not provided, use current table order.
+  const requestedCols = options.columns ?? this._colNames.slice();
 
-    // Pre-create requested columns to avoid per-row growth work.
-    for (const cn of colNames) t.ensureColumn(cn);
+  const t = new DataTable();
+  t.exportNullForMissing = this.exportNullForMissing;
+  t.caseInsensitiveNames = this.caseInsensitiveNames;
 
-    for (const r of rowIdx) {
-      this.ensureRowIndex(r);
-      const names: string[] = [];
-      const vals: any[] = [];
-      for (const cn of colNames) {
-        const idx = this.getColumnIndex(cn);
-        const v = idx < 0 ? undefined : this._columns[idx][r];
-        names.push(cn);
-        vals.push(v);
-      }
-      t.addRowFromNamesAndValues(names, vals);
+  // Resolve requested columns ONCE, in order.
+  // - srcIndex: where to read from this table (-1 if missing)
+  // - outName: the name we will create in the projected table (canonical if found)
+  const resolved = requestedCols.map((reqName) => {
+    const srcIndex = this.getColumnIndex(reqName);
+    const outName = srcIndex >= 0 ? this._colNames[srcIndex] : reqName; // preserve canonical name if present
+    return { reqName, srcIndex, outName };
+  });
+
+  // Pre-create projected columns in the requested order.
+  for (const c of resolved) t.ensureColumn(c.outName);
+
+  for (const r of rowIdx) {
+    this.ensureRowIndex(r);
+
+    const names: string[] = [];
+    const vals: any[] = [];
+
+    for (const c of resolved) {
+      const v = c.srcIndex < 0 ? undefined : this._columns[c.srcIndex][r];
+      names.push(c.outName); // ensures output order matches resolved order
+      vals.push(v);
     }
-    return t;
+
+    t.addRowFromNamesAndValues(names, vals);
   }
+
+  return t;
+}
+
 
   /**
    * Builds a simple index for equality lookups on a column.
@@ -421,5 +440,35 @@ export class DataTable {
   private toTitleCase(s: string): string {
     return s.replace(/([A-Z])/g, " $1").replace(/[_-]+/g, " ").trim().replace(/\s+/g, " ")
       .replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  static mostlySame(values: Array<any>): boolean
+  {
+    if (!values) return true;
+    if (values.length <= 1) return true;
+    const first = values[0];
+    const isFirstNumber = Number.isFinite(first);
+    for (const v of values) 
+    {
+        if (v != first) 
+        {
+            if (isFirstNumber && Number.isFinite(v))
+            {
+                if (Math.abs(first - v) > 0.001)
+                    return false;
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+  }
+
+  public isColumnMostlySame(columnName: string): boolean 
+  {
+    const col = this.tryGetColumnFromName(columnName);
+    return DataTable.mostlySame(col);
   }
 }

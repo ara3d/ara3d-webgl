@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Ara 3D Rooms + Grid + Gradient</title>
+  <title>Rooms Demo + Grid + Gradient</title>
   <link rel="stylesheet" href="./style.css" />
   <style>
     /* Full-screen split layout */
@@ -12,6 +12,7 @@
       display: flex; flex-direction: row;
       overflow: hidden;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-size: 10;
       background: #fff;
     }
     #leftPane {
@@ -50,6 +51,7 @@
       height: 100%;
       display: block;
     }
+
   </style>
 </head>
 <body>
@@ -93,29 +95,17 @@
         try { divider.releasePointerCapture(e.pointerId); } catch {}
       });
     }
-    
-    function createGeometryOutline(
-        geometry,
-        {
-            color = 0x000000,
-            linewidth = 1,
-            thresholdAngle = 1,
-        } = {}
-        ) {
-        // Extract visible edges
-        const edges = new THREE.EdgesGeometry(geometry, thresholdAngle);
 
-        const material = new THREE.LineBasicMaterial({
-            color,
-            linewidth,
-            depthTest: true,
+    function ghostedInstance(i) {
+        const ghostMaterial = new THREE.MeshStandardMaterial({
+            color: i.material.color,
             transparent: true,
+            opacity: 0.2,
+            roughness: 0.8,
+            metalness: 0.0,
+            depthWrite: false,
         });
-
-        const outline = new THREE.LineSegments(edges, material);
-        outline.frustumCulled = false;
-
-        return outline;
+        return { ...i, material: ghostMaterial };
     }
 
     async function runExample() {
@@ -123,7 +113,7 @@
 
       const leftPane = document.getElementById("leftPane");
       const gridHost = document.getElementById("gridHost");
-
+      
       const viewer = new ARA3D.Viewer();
 
       const canvas = document.querySelector(".ara3d-canvas");
@@ -136,24 +126,29 @@
         { loadParameters: true }
       );
 
-      const instances = bimData.Instances;
-      const r = bimData.Resolver;
-
       const roomInstances = [];
-      for (const inst of instances) {
-        inst.visible = r.GetInstanceCategoryName(inst) === "Rooms";
+      for (const inst of bimData.Instances) {
+        inst.visible = bimData.Resolver.GetInstanceCategoryName(inst) === "Rooms";
         if (inst.visible) roomInstances.push(inst);
       }
 
-      let currentGroup = null;
+      let currentRoom = null;
+      let ghostGroup = null;
+      let mainGroup = null;
+      let singleRooms = [];
+      let ghostedRoomInstances = [];
+
       function rebuild() {
-        const newGroup = bimData.rebuildGeometry(instances);
-        if (currentGroup) {
-          if (typeof viewer.remove === "function") viewer.remove(currentGroup);
-          else if (viewer.scene && typeof viewer.scene.remove === "function") viewer.scene.remove(currentGroup);
-        }
-        currentGroup = newGroup;
-        viewer.add(currentGroup);
+        viewer.remove(mainGroup);
+        viewer.remove(ghostGroup);
+        viewer.remove(currentRoom);
+
+        ghostedRoomInstances = roomInstances.map(ghostedInstance);
+        singleRooms = roomInstances.map(i => bimData.rebuildGeometry([i]));
+        mainGroup = bimData.rebuildGeometry(roomInstances);
+        ghostGroup = bimData.rebuildGeometry(ghostedRoomInstances);
+
+        viewer.add(mainGroup);
       }
 
       const materialCache = new Map(); 
@@ -196,10 +191,10 @@
 
       for (const inst of roomInstances) {
         const entityKey = inst.entity;
-        const params = r.ParameterMap.get(inst.entity) ?? [];
+        const params = bimData.Resolver.ParameterMap.get(inst.entity) ?? [];
 
         const names = ["__entity", "RoomName"];
-        const values = [entityKey, (r.GetInstanceName(inst) ?? "")];
+        const values = [entityKey, (bimData.Resolver.GetInstanceName(inst) ?? "")];
 
         for (const p of params) {
           if (!p?.Name) continue;
@@ -217,11 +212,6 @@
         return col.slice(); 
       }
 
-      const parameterNames = roomTable
-        .getColumnNames()
-        .filter(n => n !== "__entity" && n !== "RoomName")
-        .sort((a, b) => a.localeCompare(b));
-
       // --------------------------------------------------------------------
       // Color state + refresh helper
       // --------------------------------------------------------------------
@@ -235,24 +225,41 @@
         applyRoomColors(values, currentColoring.mapValueToColor);
       }
 
+      function selectElement(rowIndex) {
+        viewer.remove(mainGroup); 
+        viewer.remove(ghostGroup); 
+        viewer.remove(currentRoom);
+        if (rowIndex >= 0)
+        {
+            console.log(rowIndex);
+            currentRoom = singleRooms[rowIndex];
+            viewer.add(ghostGroup);
+            viewer.add(currentRoom);
+        }
+        else
+        {
+            viewer.add(mainGroup);
+        }
+      }
+
       // --------------------------------------------------------------------
       // Show parameter grid (right side), driven by DataTable
       // --------------------------------------------------------------------      
         const pinnedFirst = ["RoomName"];
         const pinnedSet = new Set(pinnedFirst);
+        const skippedSet = new Set(roomTable.getColumnNames().filter(n => roomTable.isColumnMostlySame(n)));
 
         const colNames = roomTable.getColumnNames();
         const orderedColNames = [
-        ...pinnedFirst.filter(c => colNames.includes(c)),
-        ...colNames
-            .filter(c => !pinnedSet.has(c))
+            ...pinnedFirst.filter(c => colNames.includes(c)),
+            ...colNames
+            .filter(c => !pinnedSet.has(c) && !skippedSet.has(c))
             .sort((a, b) => a.localeCompare(b)),
         ];
-        roomTable.reorderColumns(orderedColNames);
         
         const grid = await showParameterGrid({
             host: gridHost,
-            dataTable: roomTable,
+            dataTable: roomTable.project({columns: orderedColNames }),
             title: "Room Parameters",
             frozenColumns: ["RoomName"],
             hiddenColumns: ["__entity"],
@@ -261,18 +268,23 @@
             // Our generic grid callback gives rowIndex based on current position,
             // so we’ll map using __entity if it exists in rowData:
             onCellEdited: ({ rowIndex, columnName, value, rowData }) => {
-            // Prefer stable mapping via __entity if available:
-            const entity = rowData?.__entity;
-            const stableRowIndex = (entity !== undefined && entityToRowIndex.has(entity))
-                ? entityToRowIndex.get(entity)
-                : rowIndex;
+                // Prefer stable mapping via __entity if available:
+                const entity = rowData?.__entity;
+                const stableRowIndex = (entity !== undefined && entityToRowIndex.has(entity))
+                    ? entityToRowIndex.get(entity)
+                    : rowIndex;
 
-            roomTable.setValue(stableRowIndex, columnName, value);
+                roomTable.setValue(stableRowIndex, columnName, value);
 
-            if (columnName === currentColoring.parameterName) {
-                refreshColorsFromCurrentChoice();
-            }
+                if (columnName === currentColoring.parameterName) {
+                    refreshColorsFromCurrentChoice();
+                }
             },
+
+            onRowHover: (rowIndex) => {
+                selectElement(rowIndex);
+            },
+
             // You can also pass tabulatorOptions here if you want:
             // tabulatorOptions: { ... }
         });
@@ -283,7 +295,7 @@
       rebuild();
 
       showGradientChooser({
-        parameterNames: ["RoomName", ...parameterNames],
+        parameterNames: orderedColNames,
         getValuesForParameter,
         onChange: ({ parameterName, mapValueToColor, mode, order }) => {
           console.log("Color by:", parameterName, "mode:", mode, "order:", order);

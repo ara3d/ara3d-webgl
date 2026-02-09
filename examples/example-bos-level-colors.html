@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Basic Example</title>
+  <title>Color by Level Example</title>
   <link rel="stylesheet" href="./style.css" />
   <style>
     /* Simple overlay controls */
@@ -118,13 +118,12 @@
       const instances = [];
       for (const [levelKey, instGroup] of levelToInstances)
       {
-        const material = materialsByLevel.get(levelKey);
+        let material = materialsByLevel.get(levelKey);
         if (!material) continue;
 
         for (const inst of instGroup)
         {
-          // clone + attach material (avoids mutating original)
-          instances.push({ ...inst, material });
+            instances.push({ ...inst, material });
         }
       }
       return instances;

@@ -75,7 +75,6 @@ export class Viewer {
     };
 
     add(obj: THREE.Object3D, frameCamera = true) {
-        console.log('Adding object');
         this.renderer.needsUpdate = true;
         if (!this.renderer.add(obj)) {
             throw new Error('Could not load object');
@@ -83,7 +82,6 @@ export class Viewer {
     }
 
     remove(obj: THREE.Object3D) {
-        console.log('Removing object');
         this.renderer.needsUpdate = true;
         this.renderer.remove(obj);
     }

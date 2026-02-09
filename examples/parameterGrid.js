@@ -210,6 +210,7 @@ function buildColumnsFromDataTable(dataTable, opts) {
  *   columnOverrides?: Record<string, any>,
  *   tabulatorOptions?: any,
  *   onCellEdited?: (e:{rowIndex:number, columnName:string, value:any, oldValue:any, rowData:any})=>void,
+ *   onRowHover?: (rowIndex:number)=>void,
  * }} opts
  */
 export async function showParameterGrid(opts) {
@@ -227,6 +228,7 @@ export async function showParameterGrid(opts) {
     columnOverrides = {},
     tabulatorOptions = {},
     onCellEdited = null,
+    onRowHover = null,
   } = opts ?? {};
 
   if (!host) throw new Error("showParameterGrid: host is required.");
@@ -292,7 +294,9 @@ export async function showParameterGrid(opts) {
   // --- Build mappings/columns/data from DataTable
   const colNames = dataTable.getColumnNames();
   const { fieldForName, nameForField } = buildFieldMappings(colNames);
-
+  
+  hiddenColumns.push("__rowIndex"); 
+  
   const columns = buildColumnsFromDataTable(dataTable, {
     fieldForName,
     frozenColumns,
@@ -302,7 +306,8 @@ export async function showParameterGrid(opts) {
     columnOverrides,
   });
 
-  const tableData = dataTableToTabulatorObjects(dataTable, fieldForName);
+  const tableData = dataTableToTabulatorObjects(dataTable, fieldForName)
+    .map((o, i) => ({ __rowIndex: i, ...o }));
 
   titleEl.textContent = `${title} (${dataTable.getNumRows?.() ?? tableData.length} rows, ${colNames.length} cols)`;
 
@@ -360,6 +365,29 @@ export async function showParameterGrid(opts) {
 
       onCellEdited({ rowIndex, columnName, value, oldValue, rowData });
     });
+  }
+  if (onRowHover) {
+    let last = -1;
+
+    const emit = (idx) => {
+        if (idx === last) return;
+        last = idx;
+        onRowHover(idx);
+    };
+
+    table.on("rowMouseEnter", (e, row) => {
+        // Stable index (recommended)
+        const data = row.getData();
+        if (typeof data.__rowIndex === "number") emit(data.__rowIndex);
+        else emit(row.getPosition(true)); // fallback (changes with sort/filter)
+    });
+
+    table.on("rowMouseLeave", () => {
+        emit(-1);
+    });
+
+    // When leaving the whole grid, force “none hovered”
+    gridHost.addEventListener("mouseleave", () => emit(-1));
   }
 
   // Public API

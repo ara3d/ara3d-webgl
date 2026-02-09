@@ -16,6 +16,7 @@ export default defineConfig({
                 exampleGeometry: resolve(__dirname, 'examples/example-geometry.html'),
                 exampleGltf: resolve(__dirname, 'examples/example-gltf-duck.html'),
                 exampleBosFilters: resolve(__dirname, 'examples/example-bos-filters.html'),
+                exampleBosRooms: resolve(__dirname, 'examples/example-bos-rooms.html'),
                 exampleBosLevelColors: resolve(__dirname, 'examples/example-bos-level-colors.html'),
                 exampleBosSelection: resolve(__dirname, 'examples/example-bos-selection.html'),
                 exampleBos: resolve(__dirname, 'examples/example-bos.html'),
