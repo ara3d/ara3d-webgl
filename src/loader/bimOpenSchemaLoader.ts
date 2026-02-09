@@ -17,10 +17,10 @@ import { BimQuery } from './bimQuery';
 import { BimParameterDescriptors } from './BimParameterDescriptors';
 import { BimParameterValues } from './BimParameterValues';
 
-type BimLoaderOptions =
-{
+// export type to make it available in consumers of the library
+export type BimLoaderOptions = {
     loadParameters: boolean;
-}
+};
 
 /**
  * Loader that takes a URL to a .ZIP or .BOS file containing BIM Open Schema geometry parquet tables:
@@ -40,7 +40,7 @@ export class BimOpenSchemaLoader {
         bimData.Instances = buildInstances(bimData.BimGeometry);
         bimData.Query = new BimQuery(bimData);
         bimData.Resolver = bimData.Query.Resolver;
-        
+
         bimData.ThreeGeometry = buildGeometry(bimData.Instances);
         return bimData;
     }
@@ -49,7 +49,10 @@ export class BimOpenSchemaLoader {
 /**
  * Reads the BOS parquet tables from a JSZip archive into a BimGeometry object.
  */
-export async function loadBimGeometryFromZip(zip: JSZip, options: BimLoaderOptions): Promise<BimData> {
+export async function loadBimGeometryFromZip(
+    zip: JSZip,
+    options: BimLoaderOptions
+): Promise<BimData> {
     // Find the file in the zip archive
     function findFileEndingWith(suffix: string): string {
         const lowerSuffix = suffix.toLowerCase();
@@ -104,14 +107,18 @@ export async function loadBimGeometryFromZip(zip: JSZip, options: BimLoaderOptio
             metadata,
             onChunk(chunk: ColumnData) {
                 let data = chunk.columnData;
-                
+
                 // Hyparquet can return INT64 as a plain array of bigint values
                 // (not a BigInt64Array), so probe the first element instead.
                 // !(data instanceof BigInt64Array) does not catch this.
                 const firstValue = data?.length ? (data as any)[0] : undefined;
                 const isBigIntArray = typeof firstValue === 'bigint';
-                
-                if (ctor && data.constructor.name != ctor.name && !isBigIntArray) {
+
+                if (
+                    ctor &&
+                    data.constructor.name != ctor.name &&
+                    !isBigIntArray
+                ) {
                     data = new ctor(data);
                 }
                 r[chunk.columnName] = data;
@@ -131,8 +138,13 @@ export async function loadBimGeometryFromZip(zip: JSZip, options: BimLoaderOptio
     await readParquetTable('Materials', bg, Uint8Array);
     await readParquetTable('Transforms', bg, Float32Array);
     bd.BimGeometry = bg as BimGeometry;
-    
-    await readParquetTable('Entities', bd.Entities = {} as BimEntities, Int32Array, true);
+
+    await readParquetTable(
+        'Entities',
+        (bd.Entities = {} as BimEntities),
+        Int32Array,
+        true
+    );
     await readParquetTable('Strings', bd, null, true);
 
     if (options && options.loadParameters)

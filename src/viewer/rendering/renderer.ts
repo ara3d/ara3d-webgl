@@ -68,9 +68,11 @@ export class Renderer {
         this.needsUpdate = true;
     }
 
+    // Render only when the scene/camera is marked dirty, then reset the flag.
     render() {
         if (!this.needsUpdate && !this.camera.hasMoved) return;
         this.renderer.render(this.scene, this.camera.camPerspective.camera);
+        this.needsUpdate = false;
     }
 
     add(target: THREE.Object3D) {
@@ -91,6 +93,7 @@ export class Renderer {
 
     private _lastSize = new THREE.Vector2();
 
+    // Resize renderer output; invalidates the scene to re-render at new size.
     private fitViewport = () => {
         const size = this.viewport.getParentSize();
 
