@@ -82,6 +82,15 @@ export class DataTable {
 
   // -------------- Schema / metadata --------------
 
+  public reorderColumns(names: Array<string>) {
+    this._colNames = names;
+    this._colIndex.clear();
+    for (let i=0; i < this._colNames.length; i++)
+    {
+        this._colIndex.set(this._colNames[i], i);
+    }
+  }
+
   public getColumnNames(): Array<string> {
     return this._colNames.slice();
   }

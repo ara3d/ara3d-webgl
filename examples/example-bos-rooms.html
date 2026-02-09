@@ -64,7 +64,7 @@
 
   <script type="module">
     import * as ARA3D from "../src/index";
-    import { showParameterGrid } from "./parameterGrid.js";   // updated version that takes {host, dataTable,...}
+    import { showParameterGrid } from "./parameterGrid.js";  
     import { showGradientChooser } from "./gradientChooser.js";
     import * as THREE from "three";
 
@@ -93,27 +93,29 @@
         try { divider.releasePointerCapture(e.pointerId); } catch {}
       });
     }
+    
+    function createGeometryOutline(
+        geometry,
+        {
+            color = 0x000000,
+            linewidth = 1,
+            thresholdAngle = 1,
+        } = {}
+        ) {
+        // Extract visible edges
+        const edges = new THREE.EdgesGeometry(geometry, thresholdAngle);
 
-    function waitForAraCanvas({ timeoutMs = 5000 } = {}) {
-      // Ara Viewer typically creates a canvas with class "ara3d-canvas" (based on your earlier code).
-      // We’ll poll briefly in case it’s created async.
-      const start = performance.now();
-      return new Promise((resolve, reject) => {
-        const tick = () => {
-          const canvas =
-            document.querySelector(".ara3d-canvas") ||
-            document.querySelector("canvas.ara3d-canvas") ||
-            document.querySelector("canvas");
+        const material = new THREE.LineBasicMaterial({
+            color,
+            linewidth,
+            depthTest: true,
+            transparent: true,
+        });
 
-          if (canvas) return resolve(canvas);
+        const outline = new THREE.LineSegments(edges, material);
+        outline.frustumCulled = false;
 
-          if (performance.now() - start > timeoutMs) {
-            return reject(new Error("Could not find Ara 3D canvas element. (Expected .ara3d-canvas or a <canvas>.)"));
-          }
-          requestAnimationFrame(tick);
-        };
-        tick();
-      });
+        return outline;
     }
 
     async function runExample() {
@@ -122,48 +124,39 @@
       const leftPane = document.getElementById("leftPane");
       const gridHost = document.getElementById("gridHost");
 
-      // --- Create viewer (it will create its canvas somewhere in the DOM) ---
       const viewer = new ARA3D.Viewer();
 
-      // Move the viewer canvas into our left pane
-      const canvas = await waitForAraCanvas();
+      const canvas = document.querySelector(".ara3d-canvas");
       leftPane.appendChild(canvas);
 
       const loader = new ARA3D.BimOpenSchemaLoader();
 
-      console.time("Loading .bos file");
       const bimData = await loader.load(
         "/ara3d-webgl/Snowdon Towers Sample Architectural.bos",
         { loadParameters: true }
       );
-      console.timeEnd("Loading .bos file");
 
       const instances = bimData.Instances;
       const r = bimData.Resolver;
 
-      // ---- Collect room instances ----
       const roomInstances = [];
       for (const inst of instances) {
         inst.visible = r.GetInstanceCategoryName(inst) === "Rooms";
         if (inst.visible) roomInstances.push(inst);
       }
 
-      // ---- Viewer geometry group management (rebuild on demand) ----
       let currentGroup = null;
       function rebuild() {
         const newGroup = bimData.rebuildGeometry(instances);
-
         if (currentGroup) {
           if (typeof viewer.remove === "function") viewer.remove(currentGroup);
           else if (viewer.scene && typeof viewer.scene.remove === "function") viewer.scene.remove(currentGroup);
         }
-
         currentGroup = newGroup;
         viewer.add(currentGroup);
       }
 
-      // ---- Materials (cached) ----
-      const materialCache = new Map(); // "#RRGGBB" -> THREE.Material
+      const materialCache = new Map(); 
       function getMaterialForColor(hexColor) {
         const key = String(hexColor);
         let m = materialCache.get(key);
@@ -221,7 +214,7 @@
       function getValuesForParameter(parameterName) {
         const col = roomTable.tryGetColumnFromName(parameterName);
         if (!col) return roomInstances.map(_ => null);
-        return col.slice(); // aligned to roomInstances order because we added rows in that order
+        return col.slice(); 
       }
 
       const parameterNames = roomTable
@@ -244,32 +237,45 @@
 
       // --------------------------------------------------------------------
       // Show parameter grid (right side), driven by DataTable
-      // --------------------------------------------------------------------
-      const grid = await showParameterGrid({
-        host: gridHost,
-        dataTable: roomTable,
-        title: "Room Parameters",
-        frozenColumns: ["RoomName"],
-        hiddenColumns: ["__entity"],
-        // IMPORTANT: use stable row key if your grid allows sorting/filtering.
-        // Our generic grid callback gives rowIndex based on current position,
-        // so we’ll map using __entity if it exists in rowData:
-        onCellEdited: ({ rowIndex, columnName, value, rowData }) => {
-          // Prefer stable mapping via __entity if available:
-          const entity = rowData?.__entity;
-          const stableRowIndex = (entity !== undefined && entityToRowIndex.has(entity))
-            ? entityToRowIndex.get(entity)
-            : rowIndex;
+      // --------------------------------------------------------------------      
+        const pinnedFirst = ["RoomName"];
+        const pinnedSet = new Set(pinnedFirst);
 
-          roomTable.setValue(stableRowIndex, columnName, value);
+        const colNames = roomTable.getColumnNames();
+        const orderedColNames = [
+        ...pinnedFirst.filter(c => colNames.includes(c)),
+        ...colNames
+            .filter(c => !pinnedSet.has(c))
+            .sort((a, b) => a.localeCompare(b)),
+        ];
+        roomTable.reorderColumns(orderedColNames);
+        
+        const grid = await showParameterGrid({
+            host: gridHost,
+            dataTable: roomTable,
+            title: "Room Parameters",
+            frozenColumns: ["RoomName"],
+            hiddenColumns: ["__entity"],
 
-          if (columnName === currentColoring.parameterName) {
-            refreshColorsFromCurrentChoice();
-          }
-        },
-        // You can also pass tabulatorOptions here if you want:
-        // tabulatorOptions: { ... }
-      });
+            // IMPORTANT: use stable row key if your grid allows sorting/filtering.
+            // Our generic grid callback gives rowIndex based on current position,
+            // so we’ll map using __entity if it exists in rowData:
+            onCellEdited: ({ rowIndex, columnName, value, rowData }) => {
+            // Prefer stable mapping via __entity if available:
+            const entity = rowData?.__entity;
+            const stableRowIndex = (entity !== undefined && entityToRowIndex.has(entity))
+                ? entityToRowIndex.get(entity)
+                : rowIndex;
+
+            roomTable.setValue(stableRowIndex, columnName, value);
+
+            if (columnName === currentColoring.parameterName) {
+                refreshColorsFromCurrentChoice();
+            }
+            },
+            // You can also pass tabulatorOptions here if you want:
+            // tabulatorOptions: { ... }
+        });
 
       // --------------------------------------------------------------------
       // Initial build + Gradient chooser

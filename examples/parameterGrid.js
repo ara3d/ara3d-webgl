@@ -137,7 +137,7 @@ function buildColumnsFromDataTable(dataTable, opts) {
   } = opts;
 
   const colNames = dataTable.getColumnNames();
-
+  
   const hidden = new Set(hiddenColumns.map(String));
   const frozen = new Set(frozenColumns.map(String));
 
