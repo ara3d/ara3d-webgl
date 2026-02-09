@@ -114,7 +114,7 @@ export class Viewport {
      */
     private watchResize(timeout: number) {
         let timerId: ReturnType<typeof setTimeout> | undefined;
-        const onResize = () => {
+        const triggerResize = () => {
             if (timerId !== undefined) {
                 clearTimeout(timerId);
                 timerId = undefined;
@@ -124,9 +124,27 @@ export class Viewport {
                 this._onResize.dispatch();
             }, timeout);
         };
-        window.addEventListener('resize', onResize);
 
-        this._unregisterResize = () =>
-            window.removeEventListener('resize', onResize);
+        // Listen to window resize as a fallback.
+        const onWindowResize = () => triggerResize();
+        window.addEventListener('resize', onWindowResize);
+
+        // Also listen for actual element size changes. This handles cases where
+        // the canvas container resizes without a window resize event
+        // (e.g. flex layout changes, draggable dividers, etc.).
+        let resizeObserver: ResizeObserver | undefined;
+        const target = this.canvas.parentElement ?? this.canvas;
+        if (typeof ResizeObserver !== 'undefined' && target) {
+            resizeObserver = new ResizeObserver(() => triggerResize());
+            resizeObserver.observe(target);
+        }
+
+        this._unregisterResize = () => {
+            window.removeEventListener('resize', onWindowResize);
+            if (resizeObserver) {
+                resizeObserver.disconnect();
+                resizeObserver = undefined;
+            }
+        };
     }
 }

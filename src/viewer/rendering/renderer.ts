@@ -111,6 +111,13 @@ export class Renderer {
         //this.renderer.setPixelRatio(window.devicePixelRatio)
 
         this.renderer.setSize(size.x, size.y);
+
+        // Ensure the canvas display size matches the render size to avoid
+        // stretching when layout or CSS resizes the parent.
+        const canvas = this.viewport.canvas;
+        canvas.style.width = `${size.x}px`;
+        canvas.style.height = `${size.y}px`;
+
         this.needsUpdate = true;
     };
 }
