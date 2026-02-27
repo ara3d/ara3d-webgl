@@ -69,7 +69,6 @@ function mergeBucket(instances: Instance[]): ViewStateBucketResult {
     const mergedIndices = new Uint32Array(indexCount);
     const instanceIds = new Float32Array(vertexCount);
     const materialIds = new Float32Array(vertexCount);
-    const triToInstance = new Uint32Array(indexCount / 3);
 
     let runningVertexOffset = 0;
     let runningIndexOffset = 0;
@@ -83,7 +82,6 @@ function mergeBucket(instances: Instance[]): ViewStateBucketResult {
         const srcNormal = buffers.normals;
         const srcIndex = buffers.indices;
         const vertexCountForInstance = buffers.vertexCount;
-        const triStart = runningIndexOffset / 3;
         const dstVertexBase = runningVertexOffset * 3;
         const srcVertexLen = vertexCountForInstance * 3;
 
@@ -130,11 +128,6 @@ function mergeBucket(instances: Instance[]): ViewStateBucketResult {
             mergedIndices[runningIndexOffset + i] = srcIndex[i] + runningVertexOffset;
         }
 
-        const triCount = buffers.indexCount / 3;
-        for (let t = 0; t < triCount; t++) {
-            triToInstance[triStart + t] = instance.instance;
-        }
-
         runningVertexOffset += vertexCountForInstance;
         runningIndexOffset += buffers.indexCount;
     }
@@ -147,8 +140,7 @@ function mergeBucket(instances: Instance[]): ViewStateBucketResult {
     geometry.setIndex(new THREE.BufferAttribute(mergedIndices, 1));
 
     return {
-        geometry,
-        triangleToInstance: triToInstance
+        geometry
     };
 }
 

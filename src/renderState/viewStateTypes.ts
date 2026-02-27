@@ -26,7 +26,6 @@ export type ViewStateBucketBuildInput = {
 
 export type ViewStateBucketResult = {
     geometry: THREE.BufferGeometry;
-    triangleToInstance: Uint32Array;
 };
 
 export type ViewStateRenderModel = {
@@ -34,5 +33,4 @@ export type ViewStateRenderModel = {
     textures: ViewStateTextures;
     materialOpaque: THREE.MeshStandardMaterial;
     materialTransparent: THREE.MeshStandardMaterial;
-    triangleToInstanceByBucket: Map<string, Uint32Array>;
 };

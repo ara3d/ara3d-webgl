@@ -66,16 +66,10 @@ export function buildViewStateRuntime(instances: Array<Instance | undefined>): V
     group.name = 'ViewStateRoot';
     group.rotation.x = -Math.PI / 2;
 
-    const triangleToInstanceByBucket = new Map<string, Uint32Array>();
-
     if (opaque.geometry.getIndex() && opaque.geometry.getIndex().count > 0) {
         const meshOpaque = new THREE.Mesh(opaque.geometry, materialOpaque);
         meshOpaque.name = 'ViewStateOpaqueBucket';
-        meshOpaque.userData.pick = {
-            kind: 'merged',
-            triToInstanceIndex: opaque.triangleToInstance
-        };
-        triangleToInstanceByBucket.set(meshOpaque.name, opaque.triangleToInstance);
+        meshOpaque.userData.pick = { kind: 'viewStateMerged' };
         group.add(meshOpaque);
     }
 
@@ -83,11 +77,7 @@ export function buildViewStateRuntime(instances: Array<Instance | undefined>): V
         const meshTransparent = new THREE.Mesh(transparent.geometry, materialTransparent);
         meshTransparent.name = 'ViewStateTransparentBucket';
         meshTransparent.renderOrder = 10;
-        meshTransparent.userData.pick = {
-            kind: 'merged',
-            triToInstanceIndex: transparent.triangleToInstance
-        };
-        triangleToInstanceByBucket.set(meshTransparent.name, transparent.triangleToInstance);
+        meshTransparent.userData.pick = { kind: 'viewStateMerged' };
         group.add(meshTransparent);
     }
 
@@ -97,8 +87,7 @@ export function buildViewStateRuntime(instances: Array<Instance | undefined>): V
         group,
         textures,
         materialOpaque,
-        materialTransparent,
-        triangleToInstanceByBucket
+        materialTransparent
     };
 
     perfDuration('viewState.buildRuntime', startedAt, {
