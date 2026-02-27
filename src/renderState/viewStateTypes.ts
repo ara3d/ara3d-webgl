@@ -25,7 +25,7 @@ export type ViewStateBucketBuildInput = {
 };
 
 export type ViewStateBucketResult = {
-    geometry: THREE.BufferGeometry;
+    meshes: THREE.Mesh[];
 };
 
 export type ViewStateRenderModel = {

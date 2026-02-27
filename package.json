@@ -45,6 +45,8 @@
         "http-server": "^14",
         "opener": "^1.5.2",
         "prettier": "^2.8.0",
+        "ts-node": "^10.9.2",
+        "tsx": "^4.21.0",
         "typescript": "^5.9.3",
         "vite": "^3.2.5",
         "vitest": "^0.34.6"
@@ -52,9 +54,11 @@
     "dependencies": {
         "@types/node": "^18.11.11",
         "deepmerge": "^4.2.2",
+        "flatbuffers": "^25.9.23",
         "hyparquet": "^1.23.0",
         "hyparquet-compressors": "^1.1.1",
         "jszip": "^3.10.1",
+        "meshoptimizer": "^1.0.1",
         "ste-events": "^3.0.7",
         "ste-signals": "^3.0.9",
         "ste-simple-events": "^3.0.7",

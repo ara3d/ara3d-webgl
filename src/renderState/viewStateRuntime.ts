@@ -66,18 +66,18 @@ export function buildViewStateRuntime(instances: Array<Instance | undefined>): V
     group.name = 'ViewStateRoot';
     group.rotation.x = -Math.PI / 2;
 
-    if (opaque.geometry.getIndex() && opaque.geometry.getIndex().count > 0) {
-        const meshOpaque = new THREE.Mesh(opaque.geometry, materialOpaque);
-        meshOpaque.name = 'ViewStateOpaqueBucket';
-        meshOpaque.userData.pick = { kind: 'viewStateMerged' };
+    for (let i = 0; i < opaque.meshes.length; i++) {
+        const meshOpaque = opaque.meshes[i];
+        meshOpaque.material = materialOpaque;
+        meshOpaque.name = `ViewStateOpaqueBucket_${i}`;
         group.add(meshOpaque);
     }
 
-    if (transparent.geometry.getIndex() && transparent.geometry.getIndex().count > 0) {
-        const meshTransparent = new THREE.Mesh(transparent.geometry, materialTransparent);
-        meshTransparent.name = 'ViewStateTransparentBucket';
+    for (let i = 0; i < transparent.meshes.length; i++) {
+        const meshTransparent = transparent.meshes[i];
+        meshTransparent.material = materialTransparent;
+        meshTransparent.name = `ViewStateTransparentBucket_${i}`;
         meshTransparent.renderOrder = 10;
-        meshTransparent.userData.pick = { kind: 'viewStateMerged' };
         group.add(meshTransparent);
     }
 
