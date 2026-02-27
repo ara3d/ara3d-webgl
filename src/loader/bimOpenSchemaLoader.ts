@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import { parquetRead, parquetMetadataAsync, ColumnData } from 'hyparquet';
 import { compressors } from 'hyparquet-compressors';
 import BimOpenSchemaWorker from './bimOpenSchema.worker?worker&inline';
+import BimOpenSchemaZipWorker from './bimOpenSchemaZip.worker?worker&inline';
 import { BimGeometry } from './bimGeometry';
 import { buildGeometry } from './buildGeometryGroup';
 import { buildInstances } from './buildInstances';
@@ -17,11 +18,17 @@ export type BimLoaderOptions = {
 
 type TableData = Record<string, unknown>;
 
-type BosWorkerLoadRequest = {
+type BosWorkerDecodeRequest = {
     id: number;
-    type: 'load';
-    source: string;
+    type: 'decode';
     workerTag: string;
+    files: Record<string, ArrayBuffer>;
+};
+
+type BosZipWorkerLoadRequest = {
+    id: number;
+    type: 'zip-load';
+    source: string;
     tables: string[];
 };
 
@@ -50,6 +57,31 @@ type BosWorkerMessage =
     | BosWorkerDoneMessage
     | BosWorkerErrorMessage;
 
+type BosZipWorkerDoneMessage = {
+    id: number;
+    type: 'done';
+    payload: Record<string, ArrayBuffer>;
+};
+
+type BosZipWorkerProgressMessage = {
+    id: number;
+    type: 'progress';
+    label: string;
+    durationMs: number;
+};
+
+type BosZipWorkerErrorMessage = {
+    id: number;
+    type: 'error';
+    message: string;
+    stack?: string;
+};
+
+type BosZipWorkerMessage =
+    | BosZipWorkerDoneMessage
+    | BosZipWorkerProgressMessage
+    | BosZipWorkerErrorMessage;
+
 type BosTablesPayload = Record<string, TableData>;
 
 type TypedArrayCtor =
@@ -63,8 +95,17 @@ type PendingWorkerRequest = {
     reject: (error: Error) => void;
 };
 
+type PendingZipWorkerRequest = {
+    resolve: (payload: Record<string, ArrayBuffer>) => void;
+    reject: (error: Error) => void;
+};
+
 type BosWorkerClientLike = {
-    load(source: string, tables: string[]): Promise<BosTablesPayload>;
+    decode(files: Record<string, ArrayBuffer>): Promise<BosTablesPayload>;
+};
+
+type BosZipWorkerClientLike = {
+    extract(source: string, tables: string[]): Promise<Record<string, ArrayBuffer>>;
 };
 
 type BosWorkerClients = {
@@ -130,14 +171,13 @@ class BimOpenSchemaWorkerClient {
         };
     }
 
-    load(source: string, tables: string[]): Promise<BosTablesPayload> {
+    decode(files: Record<string, ArrayBuffer>): Promise<BosTablesPayload> {
         const id = this.nextRequestId++;
-        const message: BosWorkerLoadRequest = {
+        const message: BosWorkerDecodeRequest = {
             id,
-            type: 'load',
-            source,
+            type: 'decode',
             workerTag: this.workerTag,
-            tables
+            files
         };
 
         return new Promise<BosTablesPayload>((resolve, reject) => {
@@ -147,8 +187,59 @@ class BimOpenSchemaWorkerClient {
     }
 }
 
+class BimOpenSchemaZipWorkerClient {
+    private readonly worker: Worker;
+    private readonly pending = new Map<number, PendingZipWorkerRequest>();
+    private nextRequestId = 1;
+
+    constructor() {
+        this.worker = new BimOpenSchemaZipWorker();
+        this.worker.onmessage = (event: MessageEvent<BosZipWorkerMessage>) => {
+            const message = event.data;
+            const pendingRequest = this.pending.get(message.id);
+            if (!pendingRequest) return;
+
+            if (message.type === 'progress') {
+                console.debug(`[BOS worker] ${message.label}: ${message.durationMs} ms`);
+                return;
+            }
+
+            if (message.type === 'done') {
+                this.pending.delete(message.id);
+                pendingRequest.resolve(message.payload);
+                return;
+            }
+
+            this.pending.delete(message.id);
+            pendingRequest.reject(new Error(message.message));
+        };
+        this.worker.onerror = (event: ErrorEvent) => {
+            for (const request of this.pending.values()) {
+                request.reject(new Error(event.message || 'BOS zip worker crashed'));
+            }
+            this.pending.clear();
+        };
+    }
+
+    extract(source: string, tables: string[]): Promise<Record<string, ArrayBuffer>> {
+        const id = this.nextRequestId++;
+        const message: BosZipWorkerLoadRequest = {
+            id,
+            type: 'zip-load',
+            source,
+            tables
+        };
+        return new Promise<Record<string, ArrayBuffer>>((resolve, reject) => {
+            this.pending.set(id, { resolve, reject });
+            this.worker.postMessage(message);
+        });
+    }
+}
+
 let workerClients: BosWorkerClients | null = null;
 let workerClientsOverride: BosWorkerClients | null = null;
+let zipWorkerClient: BosZipWorkerClientLike | null = null;
+let zipWorkerClientOverride: BosZipWorkerClientLike | null = null;
 
 function getWorkerClients(): BosWorkerClients {
     if (workerClientsOverride) {
@@ -162,6 +253,16 @@ function getWorkerClients(): BosWorkerClients {
         };
     }
     return workerClients;
+}
+
+function getZipWorkerClient(): BosZipWorkerClientLike {
+    if (zipWorkerClientOverride) {
+        return zipWorkerClientOverride;
+    }
+    if (!zipWorkerClient) {
+        zipWorkerClient = new BimOpenSchemaZipWorkerClient();
+    }
+    return zipWorkerClient;
 }
 
 function materializeBimData(payload: BosTablesPayload): BimData {
@@ -219,6 +320,22 @@ function mergePayloads(payloads: BosTablesPayload[]): BosTablesPayload {
         Object.assign(acc, payload);
         return acc;
     }, {} as BosTablesPayload);
+}
+
+function pickFiles(files: Record<string, ArrayBuffer>, tables: string[]): Record<string, ArrayBuffer> {
+    const selected: Record<string, ArrayBuffer> = {};
+    for (const tableName of tables) {
+        const buffer = files[tableName];
+        if (!buffer) {
+            throw new Error(`Missing extracted parquet buffer for "${tableName}".`);
+        }
+        selected[tableName] = buffer;
+    }
+    return selected;
+}
+
+function buildAllRequestedTables(options: BimLoaderOptions): string[] {
+    return [...VERTEX_TABLES, ...INDEX_TABLES, ...buildOtherTables(options)];
 }
 
 function findFileEndingWith(zip: JSZip, suffix: string): string {
@@ -370,10 +487,18 @@ export class BimOpenSchemaLoader {
         console.time(totalTimer);
         try {
             const clients = getWorkerClients();
+            const extractedFiles = await getZipWorkerClient().extract(
+                source,
+                buildAllRequestedTables(options)
+            );
+            const vertexFiles = pickFiles(extractedFiles, VERTEX_TABLES);
+            const indexFiles = pickFiles(extractedFiles, INDEX_TABLES);
+            const otherTables = buildOtherTables(options);
+            const otherFiles = pickFiles(extractedFiles, otherTables);
             const [vertexPayload, indexPayload, othersPayload] = await Promise.all([
-                clients.vertex.load(source, VERTEX_TABLES),
-                clients.index.load(source, INDEX_TABLES),
-                clients.others.load(source, buildOtherTables(options))
+                clients.vertex.decode(vertexFiles),
+                clients.index.decode(indexFiles),
+                clients.others.decode(otherFiles)
             ]);
             const payload = mergePayloads([vertexPayload, indexPayload, othersPayload]);
             return finalizeBimData(materializeBimData(payload));
@@ -393,4 +518,8 @@ export async function loadBimGeometryFromZip(zip: JSZip, options: BimLoaderOptio
 // Test hooks for verifying worker/fallback flow without browser workers/parquet fixtures.
 export function __setWorkerClientsForTests(clients: BosWorkerClients | null): void {
     workerClientsOverride = clients;
+}
+
+export function __setZipWorkerClientForTests(client: BosZipWorkerClientLike | null): void {
+    zipWorkerClientOverride = client;
 }

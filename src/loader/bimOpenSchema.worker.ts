@@ -1,17 +1,17 @@
-import JSZip from 'jszip';
 import { parquetRead, parquetMetadataAsync, ColumnData } from 'hyparquet';
 import { compressors } from 'hyparquet-compressors';
 
-const workerScope = self as unknown as DedicatedWorkerGlobalScope;
+const workerScope = self as unknown as {
+    postMessage: (message: unknown, transfer?: Transferable[]) => void;
+};
 
 type TableData = Record<string, unknown>;
 
-type BosWorkerLoadRequest = {
+type BosWorkerDecodeRequest = {
     id: number;
-    type: 'load';
-    source: string;
+    type: 'decode';
     workerTag: string;
-    tables: string[];
+    files: Record<string, ArrayBuffer>;
 };
 
 type BosTablesPayload = Record<string, TableData>;
@@ -42,16 +42,13 @@ type TypedArrayCtor =
     | Uint8ArrayConstructor
     | Float32ArrayConstructor;
 
-const REQUIRED_GEOMETRY_TABLES: Array<[string, TypedArrayCtor | null]> = [
+const TABLE_CONFIG = new Map<string, TypedArrayCtor | null>([
     ['Instances', Int32Array],
     ['VertexBuffer', Int32Array],
     ['IndexBuffer', Uint32Array],
     ['Meshes', Int32Array],
     ['Materials', Uint8Array],
-    ['Transforms', Float32Array]
-];
-
-const OPTIONAL_TABLE_CONFIG = new Map<string, TypedArrayCtor | null>([
+    ['Transforms', Float32Array],
     ['Entities', Int32Array],
     ['Strings', null],
     ['Descriptors', Int32Array],
@@ -61,33 +58,6 @@ const OPTIONAL_TABLE_CONFIG = new Map<string, TypedArrayCtor | null>([
     ['EntityParameters', Int32Array],
     ['PointParameters', Int32Array]
 ]);
-
-const TABLE_CONFIG = new Map<string, TypedArrayCtor | null>([
-    ...REQUIRED_GEOMETRY_TABLES,
-    ...OPTIONAL_TABLE_CONFIG
-]);
-
-async function getZipFromSource(source: string): Promise<JSZip> {
-    const response = await fetch(source);
-    if (!response.ok) {
-        throw new Error(
-            `Failed to fetch BOS from ${source}: ${response.status} ${response.statusText}`
-        );
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    return JSZip.loadAsync(arrayBuffer);
-}
-
-function findFileEndingWith(zip: JSZip, suffix: string): string {
-    const lowerSuffix = suffix.toLowerCase();
-    const name = Object.keys(zip.files).find((entryName) =>
-        entryName.toLowerCase().endsWith(lowerSuffix)
-    );
-    if (!name) {
-        throw new Error(`Could not find "${suffix}" in zip archive.`);
-    }
-    return name;
-}
 
 function maybeConvertColumn(
     data: ColumnData['columnData'],
@@ -111,37 +81,12 @@ function maybeConvertColumn(
 }
 
 async function readParquetTable(
-    zip: JSZip,
     tableName: string,
+    file: ArrayBuffer,
     ctor: TypedArrayCtor | null,
-    optional: boolean,
     requestId: number,
     workerTag: string
-): Promise<TableData | undefined> {
-    let entryName: string | undefined;
-    try {
-        entryName = findFileEndingWith(zip, tableName + '.parquet');
-    } catch (error) {
-        if (optional) return undefined;
-        throw error;
-    }
-
-    if (!entryName) {
-        if (optional) return undefined;
-        throw new Error(`Could not find "${tableName}.parquet" in zip archive.`);
-    }
-
-    const zipStart = performance.now();
-    const file = await zip.files[entryName].async('arraybuffer');
-    const zipDuration = performance.now() - zipStart;
-    const zipProgress: BosWorkerProgressMessage = {
-        id: requestId,
-        type: 'progress',
-        label: `[${workerTag}] Getting zip table ${entryName}`,
-        durationMs: zipDuration
-    };
-    workerScope.postMessage(zipProgress);
-
+): Promise<TableData> {
     const parquetStart = performance.now();
     const metadata = await parquetMetadataAsync(file);
     const table: TableData = {};
@@ -168,7 +113,7 @@ async function readParquetTable(
     const parquetProgress: BosWorkerProgressMessage = {
         id: requestId,
         type: 'progress',
-        label: `[${workerTag}] Getting parquet data ${entryName}`,
+        label: `[${workerTag}] Getting parquet data ${tableName}.parquet`,
         durationMs: parquetDuration
     };
     workerScope.postMessage(parquetProgress);
@@ -192,39 +137,27 @@ function collectTransfers(payload: BosTablesPayload): ArrayBuffer[] {
     return transfers;
 }
 
-async function loadBosTables(request: BosWorkerLoadRequest): Promise<BosTablesPayload> {
-    const { source, id, workerTag, tables } = request;
-    const zip = await getZipFromSource(source);
+async function decodeBosTables(request: BosWorkerDecodeRequest): Promise<BosTablesPayload> {
+    const { id, workerTag, files } = request;
     const payload: BosTablesPayload = {};
-    const requiredTables = new Set(REQUIRED_GEOMETRY_TABLES.map(([name]) => name));
-
-    for (const tableName of tables) {
+    for (const [tableName, file] of Object.entries(files)) {
         const ctor = TABLE_CONFIG.get(tableName);
         if (ctor === undefined) {
             throw new Error(`Unknown table "${tableName}" requested.`);
         }
-        const table = await readParquetTable(
-            zip,
-            tableName,
-            ctor,
-            !requiredTables.has(tableName),
-            id,
-            workerTag
-        );
-        if (table) {
-            payload[tableName] = table;
-        }
+        const table = await readParquetTable(tableName, file, ctor, id, workerTag);
+        payload[tableName] = table;
     }
 
     return payload;
 }
 
-self.onmessage = async (event: MessageEvent<BosWorkerLoadRequest>) => {
+self.onmessage = async (event: MessageEvent<BosWorkerDecodeRequest>) => {
     const request = event.data;
-    if (!request || request.type !== 'load') return;
+    if (!request || request.type !== 'decode') return;
 
     try {
-        const payload = await loadBosTables(request);
+        const payload = await decodeBosTables(request);
         const message: BosWorkerDoneMessage = {
             id: request.id,
             type: 'done',
