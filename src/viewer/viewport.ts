@@ -2,6 +2,7 @@ import { SignalDispatcher } from 'ste-signals';
 import * as THREE from 'three';
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer';
 import { Settings } from './viewerSettings';
+import { perfDuration, perfLongTask, perfNow } from '../perf/perf';
 
 export class Viewport {
     /** HTML Canvas on which the model is rendered */
@@ -103,7 +104,10 @@ export class Viewport {
      * Resizes canvas and update camera to match new parent dimensions.
      */
     ResizeToParent() {
+        const startedAt = perfNow();
         this._onResize.dispatch();
+        perfDuration('viewport.ResizeToParent.dispatch', startedAt);
+        perfLongTask('viewport.ResizeToParent.longTask', startedAt, 16);
     }
 
     /**
@@ -115,13 +119,24 @@ export class Viewport {
     private watchResize(timeout: number) {
         let timerId: ReturnType<typeof setTimeout> | undefined;
         const onResize = () => {
+            const onResizeStartedAt = perfNow();
             if (timerId !== undefined) {
                 clearTimeout(timerId);
                 timerId = undefined;
             }
+            perfDuration('viewport.watchResize.windowEvent', onResizeStartedAt, {
+                timeout
+            });
             timerId = setTimeout(() => {
+                const timeoutStartedAt = perfNow();
                 timerId = undefined;
                 this._onResize.dispatch();
+                perfDuration('viewport.watchResize.timeoutDispatch', timeoutStartedAt, {
+                    timeout
+                });
+                perfLongTask('viewport.watchResize.timeoutDispatch.longTask', timeoutStartedAt, 16, {
+                    timeout
+                });
             }, timeout);
         };
         window.addEventListener('resize', onResize);

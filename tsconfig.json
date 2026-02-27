@@ -16,6 +16,7 @@
     "./src/loader/bimQuery.ts",
     "./src/loader/bimEntities.ts",
     "./src/loader/BimParameterTable.ts",
-    "./src/loader/BimParameterDescriptors.ts"
+    "./src/loader/BimParameterDescriptors.ts",
+    "./src/types/vite-worker.d.ts"
   ]
 }

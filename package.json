@@ -28,7 +28,8 @@
         "preview:docs": "vite preview --mode github --config vite.config.docs.js --host",
         "serve:docs": "http-server ./docs -o --host",
         "eslint": "eslint --ext .js,.ts src --fix",
-        "gentypes": "tsc --declaration --emitDeclarationOnly --outdir ./dist/types"
+        "gentypes": "tsc --declaration --emitDeclarationOnly --outdir ./dist/types",
+        "test": "vitest run --config vitest.config.ts"
     },
     "devDependencies": {
         "@types/axios": "^0.14.0",
@@ -45,7 +46,8 @@
         "opener": "^1.5.2",
         "prettier": "^2.8.0",
         "typescript": "^5.9.3",
-        "vite": "^3.2.5"
+        "vite": "^3.2.5",
+        "vitest": "^0.34.6"
     },
     "dependencies": {
         "@types/node": "^18.11.11",

@@ -7,6 +7,7 @@ import { buildGeometry } from './buildGeometryGroup';
 import { BimEntities } from './bimEntities';
 import { BimParameterTable } from './BimParameterTable';
 import { BimParameterDescriptors } from './BimParameterDescriptors';
+import { perfDuration, perfLongTask, perfNow } from '../perf/perf';
 
 // Type-safe indexers 
 export type EntityIndex = number & { __brand: "EntityIndex" };
@@ -34,7 +35,15 @@ export class BimData
 
     rebuildGeometry(instances: Array<Instance | undefined>): THREE.Group
     {
-       return buildGeometry(instances);
+       const startedAt = perfNow();
+       const geometry = buildGeometry(instances);
+       perfDuration('bimData.rebuildGeometry', startedAt, {
+            sourceInstanceCount: instances.length
+       });
+       perfLongTask('bimData.rebuildGeometry.longTask', startedAt, 50, {
+            sourceInstanceCount: instances.length
+       });
+       return geometry;
     }
 }
 

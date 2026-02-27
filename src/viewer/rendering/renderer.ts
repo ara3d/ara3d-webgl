@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Viewport } from '../viewport';
 import { Camera } from '../camera/camera';
 import { Settings } from '../viewerSettings';
+import { perfDuration, perfLongTask, perfNow } from '../../perf/perf';
 
 export class Renderer {
     renderer: THREE.WebGLRenderer;
@@ -70,9 +71,16 @@ export class Renderer {
 
     // Render only when the scene/camera is marked dirty, then reset the flag.
     render() {
+        const startedAt = perfNow();
         if (!this.needsUpdate && !this.camera.hasMoved) return;
         this.renderer.render(this.scene, this.camera.camPerspective.camera);
         this.needsUpdate = false;
+        perfDuration('renderer.render', startedAt, {
+            objectCount: this.scene.children.length
+        });
+        perfLongTask('renderer.render.longTask', startedAt, 32, {
+            objectCount: this.scene.children.length
+        });
     }
 
     add(target: THREE.Object3D) {
@@ -95,6 +103,7 @@ export class Renderer {
 
     // Resize renderer output; invalidates the scene to re-render at new size.
     private fitViewport = () => {
+        const startedAt = perfNow();
         const size = this.viewport.getParentSize();
 
         // avoid thrashing if you get multiple resize events with the same values.
@@ -112,5 +121,9 @@ export class Renderer {
 
         this.renderer.setSize(size.x, size.y);
         this.needsUpdate = true;
+        perfDuration('renderer.fitViewport', startedAt, {
+            width: size.x,
+            height: size.y
+        });
     };
 }

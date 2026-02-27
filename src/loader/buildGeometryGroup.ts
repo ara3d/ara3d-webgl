@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Instance } from './buildInstances';
+import { perfDuration, perfLongTask, perfNow } from '../perf/perf';
 
 type GroupedInstances = Map<THREE.Material, Map<THREE.BufferGeometry, Instance[]>>;
 
@@ -9,13 +10,35 @@ type InstanceMaterialGroup = {
 };
 
 export function buildGeometry(instances: Array<Instance | undefined>): THREE.Group {
-    console.time('Building geometry');
+    const startedAt = perfNow();
+    const groupingStartedAt = perfNow();
     const root = new THREE.Group();
 
     const instanceGroups = groupInstances(instances);
+    const groupingDurationMs = perfDuration(
+        'buildGeometry.groupInstances',
+        groupingStartedAt
+    );
+    const gatherStartedAt = perfNow();
     const materialGroups = gatherSingleInstancesByMaterial(instanceGroups);
+    const gatherDurationMs = perfDuration(
+        'buildGeometry.gatherSingleInstancesByMaterial',
+        gatherStartedAt
+    );
+    const instancedStartedAt = perfNow();
     const instancedMeshes = createInstancedMeshes(instanceGroups);
+    const instancedDurationMs = perfDuration(
+        'buildGeometry.createInstancedMeshes',
+        instancedStartedAt,
+        { instancedCount: instancedMeshes.length }
+    );
+    const mergedStartedAt = perfNow();
     const nonInstancedMeshes = createMergedAndSingleMeshes(materialGroups);
+    const mergedDurationMs = perfDuration(
+        'buildGeometry.createMergedAndSingleMeshes',
+        mergedStartedAt,
+        { nonInstancedCount: nonInstancedMeshes.length }
+    );
 
     let polyCount = 0;
     for (const im of instancedMeshes) {
@@ -31,7 +54,23 @@ export function buildGeometry(instances: Array<Instance | undefined>): THREE.Gro
     // Convert Z-Up to Y-Up (for BOS geometry)
     root.rotation.x = -Math.PI / 2;
 
-    console.timeEnd('Building geometry');
+    const durationMs = perfDuration('buildGeometry.total', startedAt, {
+        sourceInstanceCount: instances.length,
+        groupedMaterialCount: instanceGroups.size,
+        materialGroupCount: materialGroups.length,
+        instancedMeshCount: instancedMeshes.length,
+        nonInstancedMeshCount: nonInstancedMeshes.length,
+        polyCount,
+        groupingDurationMs,
+        gatherDurationMs,
+        instancedDurationMs,
+        mergedDurationMs
+    });
+    perfLongTask('buildGeometry.longTask', startedAt, 50, {
+        sourceInstanceCount: instances.length,
+        polyCount,
+        durationMs
+    });
     return root;
 }
 
