@@ -3,7 +3,7 @@ import { BimGeometry } from './bimGeometry';
 import { Instance } from './buildInstances';
 import { BimResolver } from './bimResolver';
 import { BimQuery } from './bimQuery';
-import { buildGeometry } from './buildGeometryGroup';
+import { buildGeometry, buildGeometryAsync } from './buildGeometryGroup';
 import { BimEntities } from './bimEntities';
 import { BimParameterTable } from './BimParameterTable';
 import { BimParameterDescriptors } from './BimParameterDescriptors';
@@ -37,6 +37,19 @@ export class BimData
     {
        const startedAt = perfNow();
        const geometry = buildGeometry(instances);
+       perfDuration('bimData.rebuildGeometry', startedAt, {
+            sourceInstanceCount: instances.length
+       });
+       perfLongTask('bimData.rebuildGeometry.longTask', startedAt, 50, {
+            sourceInstanceCount: instances.length
+       });
+       return geometry;
+    }
+
+    async rebuildGeometryAsync(instances: Array<Instance | undefined>): Promise<THREE.Group>
+    {
+       const startedAt = perfNow();
+       const geometry = await buildGeometryAsync(instances);
        perfDuration('bimData.rebuildGeometry', startedAt, {
             sourceInstanceCount: instances.length
        });

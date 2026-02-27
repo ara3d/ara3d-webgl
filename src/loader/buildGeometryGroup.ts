@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Instance } from './buildInstances';
 import { perfDuration, perfLongTask, perfNow } from '../perf/perf';
+import BuildGeometryMergeWorker from './buildGeometryMerge.worker?worker&inline';
 
 type GroupedInstances = Map<THREE.Material, Map<THREE.BufferGeometry, Instance[]>>;
 
@@ -8,6 +9,96 @@ type InstanceMaterialGroup = {
     material: THREE.Material;
     instances: Array<Instance>;
 };
+
+type MergeTaskInstance = {
+    instanceIndex: number;
+    isIdentity: boolean;
+    transform: Float32Array;
+    positions: Float32Array;
+    indices: Uint32Array;
+};
+
+type MergeTask = {
+    taskId: number;
+    instances: MergeTaskInstance[];
+};
+
+type MergeTaskResult = {
+    taskId: number;
+    mergedPositions: Float32Array;
+    mergedIndices: Uint32Array;
+    triToInstanceIndex: Uint32Array;
+};
+
+type MergeResponse = {
+    id: number;
+    type: 'done';
+    results: MergeTaskResult[];
+};
+
+type MergeErrorResponse = {
+    id: number;
+    type: 'error';
+    message: string;
+    stack?: string;
+};
+
+type MergeWorkerMessage = MergeResponse | MergeErrorResponse;
+
+type PendingMergeRequest = {
+    resolve: (results: MergeTaskResult[]) => void;
+    reject: (error: Error) => void;
+};
+
+class BuildGeometryMergeWorkerClient {
+    private readonly worker: Worker;
+    private readonly pending = new Map<number, PendingMergeRequest>();
+    private nextRequestId = 1;
+
+    constructor() {
+        this.worker = new BuildGeometryMergeWorker();
+        this.worker.onmessage = (event: MessageEvent<MergeWorkerMessage>) => {
+            const message = event.data;
+            const pending = this.pending.get(message.id);
+            if (!pending) return;
+
+            this.pending.delete(message.id);
+            if (message.type === 'done') {
+                pending.resolve(message.results);
+                return;
+            }
+            pending.reject(new Error(message.message));
+        };
+        this.worker.onerror = (event: ErrorEvent) => {
+            for (const pending of this.pending.values()) {
+                pending.reject(new Error(event.message || 'buildGeometry merge worker crashed'));
+            }
+            this.pending.clear();
+        };
+    }
+
+    merge(tasks: MergeTask[]): Promise<MergeTaskResult[]> {
+        if (tasks.length === 0) return Promise.resolve([]);
+        const id = this.nextRequestId++;
+        return new Promise<MergeTaskResult[]>((resolve, reject) => {
+            this.pending.set(id, { resolve, reject });
+            this.worker.postMessage({
+                id,
+                type: 'merge',
+                tasks
+            });
+        });
+    }
+}
+
+let mergeWorkerClient: BuildGeometryMergeWorkerClient | null = null;
+
+function getMergeWorkerClient(): BuildGeometryMergeWorkerClient {
+    if (!mergeWorkerClient) {
+        mergeWorkerClient = new BuildGeometryMergeWorkerClient();
+    }
+    return mergeWorkerClient;
+}
 
 export function buildGeometry(instances: Array<Instance | undefined>): THREE.Group {
     const startedAt = perfNow();
@@ -52,6 +143,63 @@ export function buildGeometry(instances: Array<Instance | undefined>): THREE.Gro
     }
 
     // Convert Z-Up to Y-Up (for BOS geometry)
+    root.rotation.x = -Math.PI / 2;
+
+    const durationMs = perfDuration('buildGeometry.total', startedAt, {
+        sourceInstanceCount: instances.length,
+        groupedMaterialCount: instanceGroups.size,
+        materialGroupCount: materialGroups.length,
+        instancedMeshCount: instancedMeshes.length,
+        nonInstancedMeshCount: nonInstancedMeshes.length,
+        polyCount,
+        groupingDurationMs,
+        gatherDurationMs,
+        instancedDurationMs,
+        mergedDurationMs
+    });
+    perfLongTask('buildGeometry.longTask', startedAt, 50, {
+        sourceInstanceCount: instances.length,
+        polyCount,
+        durationMs
+    });
+    return root;
+}
+
+export async function buildGeometryAsync(instances: Array<Instance | undefined>): Promise<THREE.Group> {
+    const startedAt = perfNow();
+    const groupingStartedAt = perfNow();
+    const root = new THREE.Group();
+
+    const instanceGroups = groupInstances(instances);
+    const groupingDurationMs = perfDuration('buildGeometry.groupInstances', groupingStartedAt);
+    const gatherStartedAt = perfNow();
+    const materialGroups = gatherSingleInstancesByMaterial(instanceGroups);
+    const gatherDurationMs = perfDuration(
+        'buildGeometry.gatherSingleInstancesByMaterial',
+        gatherStartedAt
+    );
+    const instancedStartedAt = perfNow();
+    const instancedMeshes = createInstancedMeshes(instanceGroups);
+    const instancedDurationMs = perfDuration('buildGeometry.createInstancedMeshes', instancedStartedAt, {
+        instancedCount: instancedMeshes.length
+    });
+    const mergedStartedAt = perfNow();
+    const nonInstancedMeshes = await createMergedAndSingleMeshesAsync(materialGroups);
+    const mergedDurationMs = perfDuration('buildGeometry.createMergedAndSingleMeshes', mergedStartedAt, {
+        nonInstancedCount: nonInstancedMeshes.length
+    });
+
+    let polyCount = 0;
+    for (const im of instancedMeshes) {
+        polyCount += (im.geometry.index.count / 3) * im.count;
+        root.add(im);
+    }
+
+    for (const nim of nonInstancedMeshes) {
+        polyCount += nim.geometry.index.count / 3;
+        root.add(nim);
+    }
+
     root.rotation.x = -Math.PI / 2;
 
     const durationMs = perfDuration('buildGeometry.total', startedAt, {
@@ -128,6 +276,89 @@ export function createMergedAndSingleMeshes(materialGroups: Array<InstanceMateri
     }
 
     return r;
+}
+
+export async function createMergedAndSingleMeshesAsync(
+    materialGroups: Array<InstanceMaterialGroup>
+): Promise<Array<THREE.Mesh>> {
+    const result: THREE.Mesh[] = [];
+    const mergeTasks: MergeTask[] = [];
+    const mergeTaskMaterialById = new Map<number, THREE.Material>();
+    let taskId = 0;
+
+    for (const materialGroup of materialGroups) {
+        const n = materialGroup.instances.length;
+        if (n === 0) continue;
+
+        if (n === 1) {
+            const i = materialGroup.instances[0];
+            const mesh = new THREE.Mesh(i.geometry, i.material);
+            mesh.matrixAutoUpdate = false;
+            mesh.matrix.copy(i.transform);
+            mesh.userData.pick = {
+                kind: 'single',
+                instanceIndex: i.instance
+            };
+            result.push(mesh);
+            continue;
+        }
+
+        const taskInstances: MergeTaskInstance[] = [];
+        for (const instance of materialGroup.instances) {
+            const posAttr = instance.geometry.getAttribute('position') as THREE.BufferAttribute;
+            const indexAttr = instance.geometry.getIndex() as THREE.BufferAttribute;
+            if (!posAttr || !indexAttr) continue;
+
+            taskInstances.push({
+                instanceIndex: instance.instance,
+                isIdentity: instance.isIdentity,
+                transform: new Float32Array(instance.transform.elements),
+                positions: new Float32Array((posAttr.array as Float32Array).slice()),
+                indices: new Uint32Array((indexAttr.array as Uint32Array).slice())
+            });
+        }
+
+        if (taskInstances.length < 2) {
+            for (const instance of materialGroup.instances) {
+                const mesh = new THREE.Mesh(instance.geometry, instance.material);
+                mesh.matrixAutoUpdate = false;
+                mesh.matrix.copy(instance.transform);
+                mesh.userData.pick = {
+                    kind: 'single',
+                    instanceIndex: instance.instance
+                };
+                result.push(mesh);
+            }
+            continue;
+        }
+
+        mergeTaskMaterialById.set(taskId, materialGroup.material);
+        mergeTasks.push({
+            taskId,
+            instances: taskInstances
+        });
+        taskId++;
+    }
+
+    const mergedResults = await getMergeWorkerClient().merge(mergeTasks);
+    for (const merged of mergedResults) {
+        const material = mergeTaskMaterialById.get(merged.taskId);
+        if (!material) continue;
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(merged.mergedPositions, 3));
+        geometry.setIndex(new THREE.BufferAttribute(merged.mergedIndices, 1));
+
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = `MergedStatic_Material_${(material as any).Id ?? 'unknown'}`;
+        mesh.userData.pick = {
+            kind: 'merged',
+            triToInstanceIndex: merged.triToInstanceIndex
+        };
+        result.push(mesh);
+    }
+
+    return result;
 }
 
 export function mergeGeometries(geometries: Array<THREE.BufferGeometry>)

@@ -4,7 +4,6 @@ import { compressors } from 'hyparquet-compressors';
 import BimOpenSchemaWorker from './bimOpenSchema.worker?worker&inline';
 import BimOpenSchemaZipWorker from './bimOpenSchemaZip.worker?worker&inline';
 import { BimGeometry } from './bimGeometry';
-import { buildGeometry } from './buildGeometryGroup';
 import { buildInstances } from './buildInstances';
 import { BimData } from './bimData';
 import { BimEntities } from './bimEntities';
@@ -470,11 +469,11 @@ async function loadBimDataFromSourceMainThread(source: string, options: BimLoade
     return loadBimDataFromZipMainThread(zip, options);
 }
 
-function finalizeBimData(bimData: BimData): BimData {
+async function finalizeBimData(bimData: BimData): Promise<BimData> {
     bimData.Instances = buildInstances(bimData.BimGeometry);
     bimData.Query = new BimQuery(bimData);
     bimData.Resolver = bimData.Query.Resolver;
-    bimData.ThreeGeometry = buildGeometry(bimData.Instances);
+    bimData.ThreeGeometry = await bimData.rebuildGeometryAsync(bimData.Instances);
     return bimData;
 }
 
@@ -501,7 +500,7 @@ export class BimOpenSchemaLoader {
                 clients.others.decode(otherFiles)
             ]);
             const payload = mergePayloads([vertexPayload, indexPayload, othersPayload]);
-            return finalizeBimData(materializeBimData(payload));
+            return await finalizeBimData(materializeBimData(payload));
         } finally {
             console.timeEnd(totalTimer);
         }

@@ -5,7 +5,8 @@ vi.mock('./buildInstances', () => ({
 }));
 
 vi.mock('./buildGeometryGroup', () => ({
-    buildGeometry: vi.fn(() => ({ children: [] }))
+    buildGeometry: vi.fn(() => ({ children: [] })),
+    buildGeometryAsync: vi.fn(async () => ({ children: [] }))
 }));
 
 vi.mock('./bimQuery', () => ({
