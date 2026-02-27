@@ -95,6 +95,9 @@ function computeMeshGeometries(bim: BimGeometry)
         const geom = new THREE.BufferGeometry();
         geom.setAttribute('position', new THREE.BufferAttribute(positionArray, 3));
         geom.setIndex(new THREE.BufferAttribute(indexArray, 1));
+        // Compute normals once per source mesh. The view-state bucket builder can then
+        // transform/copy these normals instead of recomputing on the giant merged geometry.
+        geom.computeVertexNormals();
         meshGeometries[mi] = geom;
     }
 
