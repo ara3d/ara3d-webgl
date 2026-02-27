@@ -21,7 +21,8 @@ type BosWorkerLoadRequest = {
     id: number;
     type: 'load';
     source: string;
-    options: BimLoaderOptions;
+    workerTag: string;
+    tables: string[];
 };
 
 type BosWorkerProgressMessage = {
@@ -49,17 +50,7 @@ type BosWorkerMessage =
     | BosWorkerDoneMessage
     | BosWorkerErrorMessage;
 
-type BosTablesPayload = {
-    geometry: TableData;
-    entities?: TableData;
-    strings?: string[];
-    descriptors?: TableData;
-    integerParameters?: TableData;
-    singleParameters?: TableData;
-    stringParameters?: TableData;
-    entityParameters?: TableData;
-    pointParameters?: TableData;
-};
+type BosTablesPayload = Record<string, TableData>;
 
 type TypedArrayCtor =
     | Int32ArrayConstructor
@@ -73,15 +64,44 @@ type PendingWorkerRequest = {
 };
 
 type BosWorkerClientLike = {
-    load(source: string, options: BimLoaderOptions): Promise<BosTablesPayload>;
+    load(source: string, tables: string[]): Promise<BosTablesPayload>;
 };
+
+type BosWorkerClients = {
+    vertex: BosWorkerClientLike;
+    index: BosWorkerClientLike;
+    others: BosWorkerClientLike;
+};
+
+const REQUIRED_GEOMETRY_TABLES = [
+    'Instances',
+    'VertexBuffer',
+    'IndexBuffer',
+    'Meshes',
+    'Materials',
+    'Transforms'
+] as const;
+
+const VERTEX_TABLES = ['VertexBuffer'];
+const INDEX_TABLES = ['IndexBuffer'];
+const OTHER_TABLES_BASE = ['Instances', 'Meshes', 'Materials', 'Transforms', 'Entities', 'Strings'];
+const PARAMETER_TABLES = [
+    'Descriptors',
+    'IntegerParameters',
+    'SingleParameters',
+    'StringParameters',
+    'EntityParameters',
+    'PointParameters'
+];
 
 class BimOpenSchemaWorkerClient {
     private readonly worker: Worker;
+    private readonly workerTag: string;
     private readonly pending = new Map<number, PendingWorkerRequest>();
     private nextRequestId = 1;
 
-    constructor() {
+    constructor(workerTag: string) {
+        this.workerTag = workerTag;
         this.worker = new BimOpenSchemaWorker();
         this.worker.onmessage = (event: MessageEvent<BosWorkerMessage>) => {
             const message = event.data;
@@ -110,13 +130,14 @@ class BimOpenSchemaWorkerClient {
         };
     }
 
-    load(source: string, options: BimLoaderOptions): Promise<BosTablesPayload> {
+    load(source: string, tables: string[]): Promise<BosTablesPayload> {
         const id = this.nextRequestId++;
         const message: BosWorkerLoadRequest = {
             id,
             type: 'load',
             source,
-            options
+            workerTag: this.workerTag,
+            tables
         };
 
         return new Promise<BosTablesPayload>((resolve, reject) => {
@@ -126,49 +147,78 @@ class BimOpenSchemaWorkerClient {
     }
 }
 
-let workerClient: BimOpenSchemaWorkerClient | null = null;
-let workerClientOverride: BosWorkerClientLike | null = null;
+let workerClients: BosWorkerClients | null = null;
+let workerClientsOverride: BosWorkerClients | null = null;
 
-function getWorkerClient(): BosWorkerClientLike {
-    if (workerClientOverride) {
-        return workerClientOverride;
+function getWorkerClients(): BosWorkerClients {
+    if (workerClientsOverride) {
+        return workerClientsOverride;
     }
-    if (!workerClient) {
-        workerClient = new BimOpenSchemaWorkerClient();
+    if (!workerClients) {
+        workerClients = {
+            vertex: new BimOpenSchemaWorkerClient('vertex'),
+            index: new BimOpenSchemaWorkerClient('index'),
+            others: new BimOpenSchemaWorkerClient('others')
+        };
     }
-    return workerClient;
+    return workerClients;
 }
 
 function materializeBimData(payload: BosTablesPayload): BimData {
     const bimData = new BimData();
-    bimData.BimGeometry = payload.geometry as unknown as BimGeometry;
 
-    if (payload.entities) {
-        bimData.Entities = payload.entities as unknown as BimEntities;
+    const geometry: TableData = {};
+    for (const tableName of REQUIRED_GEOMETRY_TABLES) {
+        const table = payload[tableName];
+        if (!table) {
+            throw new Error(`Missing required table "${tableName}" from worker payload.`);
+        }
+        Object.assign(geometry, table);
     }
-    if (payload.strings) {
-        bimData.Strings = payload.strings;
+    bimData.BimGeometry = geometry as unknown as BimGeometry;
+
+    if (payload.Entities) {
+        bimData.Entities = payload.Entities as unknown as BimEntities;
     }
-    if (payload.descriptors) {
-        bimData.Descriptors = payload.descriptors as unknown as BimParameterDescriptors;
+    const stringsValue = payload.Strings?.Strings;
+    if (Array.isArray(stringsValue)) {
+        bimData.Strings = stringsValue as string[];
     }
-    if (payload.integerParameters) {
-        bimData.IntegerParameters = payload.integerParameters as unknown as BimParameterTable;
+    if (payload.Descriptors) {
+        bimData.Descriptors = payload.Descriptors as unknown as BimParameterDescriptors;
     }
-    if (payload.singleParameters) {
-        bimData.SingleParameters = payload.singleParameters as unknown as BimParameterTable;
+    if (payload.IntegerParameters) {
+        bimData.IntegerParameters = payload.IntegerParameters as unknown as BimParameterTable;
     }
-    if (payload.stringParameters) {
-        bimData.StringParameters = payload.stringParameters as unknown as BimParameterTable;
+    if (payload.SingleParameters) {
+        bimData.SingleParameters = payload.SingleParameters as unknown as BimParameterTable;
     }
-    if (payload.entityParameters) {
-        bimData.EntityParameters = payload.entityParameters as unknown as BimParameterTable;
+    if (payload.StringParameters) {
+        bimData.StringParameters = payload.StringParameters as unknown as BimParameterTable;
     }
-    if (payload.pointParameters) {
-        bimData.PointParameters = payload.pointParameters as unknown as BimParameterTable;
+    if (payload.EntityParameters) {
+        bimData.EntityParameters = payload.EntityParameters as unknown as BimParameterTable;
+    }
+    if (payload.PointParameters) {
+        bimData.PointParameters = payload.PointParameters as unknown as BimParameterTable;
     }
 
     return bimData;
+}
+
+function buildOtherTables(options: BimLoaderOptions): string[] {
+    const tables = [...OTHER_TABLES_BASE];
+    if (options?.loadParameters) {
+        tables.push(...PARAMETER_TABLES);
+    }
+    return tables;
+}
+
+function mergePayloads(payloads: BosTablesPayload[]): BosTablesPayload {
+    return payloads.reduce((acc, payload) => {
+        Object.assign(acc, payload);
+        return acc;
+    }, {} as BosTablesPayload);
 }
 
 function findFileEndingWith(zip: JSZip, suffix: string): string {
@@ -319,7 +369,13 @@ export class BimOpenSchemaLoader {
         const totalTimer = `[BOS loader] total geometry load ${source}`;
         console.time(totalTimer);
         try {
-            const payload = await getWorkerClient().load(source, options);
+            const clients = getWorkerClients();
+            const [vertexPayload, indexPayload, othersPayload] = await Promise.all([
+                clients.vertex.load(source, VERTEX_TABLES),
+                clients.index.load(source, INDEX_TABLES),
+                clients.others.load(source, buildOtherTables(options))
+            ]);
+            const payload = mergePayloads([vertexPayload, indexPayload, othersPayload]);
             return finalizeBimData(materializeBimData(payload));
         } finally {
             console.timeEnd(totalTimer);
@@ -335,6 +391,6 @@ export async function loadBimGeometryFromZip(zip: JSZip, options: BimLoaderOptio
 }
 
 // Test hooks for verifying worker/fallback flow without browser workers/parquet fixtures.
-export function __setWorkerClientForTests(client: BosWorkerClientLike | null): void {
-    workerClientOverride = client;
+export function __setWorkerClientsForTests(clients: BosWorkerClients | null): void {
+    workerClientsOverride = clients;
 }

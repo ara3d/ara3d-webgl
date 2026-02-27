@@ -1,7 +1,8 @@
 import JSZip from 'jszip';
 import { parquetRead, parquetMetadataAsync, ColumnData } from 'hyparquet';
 import { compressors } from 'hyparquet-compressors';
-import type { BimLoaderOptions } from './bimOpenSchemaLoader';
+
+const workerScope = self as unknown as DedicatedWorkerGlobalScope;
 
 type TableData = Record<string, unknown>;
 
@@ -9,20 +10,11 @@ type BosWorkerLoadRequest = {
     id: number;
     type: 'load';
     source: string;
-    options: BimLoaderOptions;
+    workerTag: string;
+    tables: string[];
 };
 
-type BosTablesPayload = {
-    geometry: TableData;
-    entities?: TableData;
-    strings?: string[];
-    descriptors?: TableData;
-    integerParameters?: TableData;
-    singleParameters?: TableData;
-    stringParameters?: TableData;
-    entityParameters?: TableData;
-    pointParameters?: TableData;
-};
+type BosTablesPayload = Record<string, TableData>;
 
 type BosWorkerProgressMessage = {
     id: number;
@@ -58,6 +50,22 @@ const REQUIRED_GEOMETRY_TABLES: Array<[string, TypedArrayCtor | null]> = [
     ['Materials', Uint8Array],
     ['Transforms', Float32Array]
 ];
+
+const OPTIONAL_TABLE_CONFIG = new Map<string, TypedArrayCtor | null>([
+    ['Entities', Int32Array],
+    ['Strings', null],
+    ['Descriptors', Int32Array],
+    ['IntegerParameters', Int32Array],
+    ['SingleParameters', Int32Array],
+    ['StringParameters', Int32Array],
+    ['EntityParameters', Int32Array],
+    ['PointParameters', Int32Array]
+]);
+
+const TABLE_CONFIG = new Map<string, TypedArrayCtor | null>([
+    ...REQUIRED_GEOMETRY_TABLES,
+    ...OPTIONAL_TABLE_CONFIG
+]);
 
 async function getZipFromSource(source: string): Promise<JSZip> {
     const response = await fetch(source);
@@ -107,7 +115,8 @@ async function readParquetTable(
     tableName: string,
     ctor: TypedArrayCtor | null,
     optional: boolean,
-    requestId: number
+    requestId: number,
+    workerTag: string
 ): Promise<TableData | undefined> {
     let entryName: string | undefined;
     try {
@@ -128,10 +137,10 @@ async function readParquetTable(
     const zipProgress: BosWorkerProgressMessage = {
         id: requestId,
         type: 'progress',
-        label: `Getting zip table ${entryName}`,
+        label: `[${workerTag}] Getting zip table ${entryName}`,
         durationMs: zipDuration
     };
-    self.postMessage(zipProgress);
+    workerScope.postMessage(zipProgress);
 
     const parquetStart = performance.now();
     const metadata = await parquetMetadataAsync(file);
@@ -159,10 +168,10 @@ async function readParquetTable(
     const parquetProgress: BosWorkerProgressMessage = {
         id: requestId,
         type: 'progress',
-        label: `Getting parquet data ${entryName}`,
+        label: `[${workerTag}] Getting parquet data ${entryName}`,
         durationMs: parquetDuration
     };
-    self.postMessage(parquetProgress);
+    workerScope.postMessage(parquetProgress);
     return table;
 }
 
@@ -170,67 +179,44 @@ function collectTransfersFromTable(table: TableData | undefined, transfers: Arra
     if (!table) return;
     for (const value of Object.values(table)) {
         if (ArrayBuffer.isView(value)) {
-            transfers.push(value.buffer);
+            transfers.push(value.buffer as ArrayBuffer);
         }
     }
 }
 
 function collectTransfers(payload: BosTablesPayload): ArrayBuffer[] {
     const transfers: ArrayBuffer[] = [];
-    collectTransfersFromTable(payload.geometry, transfers);
-    collectTransfersFromTable(payload.entities, transfers);
-    collectTransfersFromTable(payload.descriptors, transfers);
-    collectTransfersFromTable(payload.integerParameters, transfers);
-    collectTransfersFromTable(payload.singleParameters, transfers);
-    collectTransfersFromTable(payload.stringParameters, transfers);
-    collectTransfersFromTable(payload.entityParameters, transfers);
-    collectTransfersFromTable(payload.pointParameters, transfers);
+    for (const table of Object.values(payload)) {
+        collectTransfersFromTable(table, transfers);
+    }
     return transfers;
 }
 
-async function loadBosTables(source: string, options: BimLoaderOptions, requestId: number): Promise<BosTablesPayload> {
+async function loadBosTables(request: BosWorkerLoadRequest): Promise<BosTablesPayload> {
+    const { source, id, workerTag, tables } = request;
     const zip = await getZipFromSource(source);
-    const geometry: TableData = {};
+    const payload: BosTablesPayload = {};
+    const requiredTables = new Set(REQUIRED_GEOMETRY_TABLES.map(([name]) => name));
 
-    for (const [tableName, ctor] of REQUIRED_GEOMETRY_TABLES) {
-        const table = await readParquetTable(zip, tableName, ctor, false, requestId);
-        if (!table) {
-            throw new Error(`Missing required table "${tableName}".`);
+    for (const tableName of tables) {
+        const ctor = TABLE_CONFIG.get(tableName);
+        if (ctor === undefined) {
+            throw new Error(`Unknown table "${tableName}" requested.`);
         }
-        Object.assign(geometry, table);
+        const table = await readParquetTable(
+            zip,
+            tableName,
+            ctor,
+            !requiredTables.has(tableName),
+            id,
+            workerTag
+        );
+        if (table) {
+            payload[tableName] = table;
+        }
     }
 
-    const entities = await readParquetTable(zip, 'Entities', Int32Array, true, requestId);
-    const stringsTable = await readParquetTable(zip, 'Strings', null, true, requestId);
-    const stringsValue = stringsTable?.Strings;
-
-    let descriptors: TableData | undefined;
-    let integerParameters: TableData | undefined;
-    let singleParameters: TableData | undefined;
-    let stringParameters: TableData | undefined;
-    let entityParameters: TableData | undefined;
-    let pointParameters: TableData | undefined;
-
-    if (options?.loadParameters) {
-        descriptors = await readParquetTable(zip, 'Descriptors', Int32Array, false, requestId);
-        integerParameters = await readParquetTable(zip, 'IntegerParameters', Int32Array, false, requestId);
-        singleParameters = await readParquetTable(zip, 'SingleParameters', Int32Array, false, requestId);
-        stringParameters = await readParquetTable(zip, 'StringParameters', Int32Array, false, requestId);
-        entityParameters = await readParquetTable(zip, 'EntityParameters', Int32Array, false, requestId);
-        pointParameters = await readParquetTable(zip, 'PointParameters', Int32Array, false, requestId);
-    }
-
-    return {
-        geometry,
-        entities,
-        strings: Array.isArray(stringsValue) ? (stringsValue as string[]) : undefined,
-        descriptors,
-        integerParameters,
-        singleParameters,
-        stringParameters,
-        entityParameters,
-        pointParameters
-    };
+    return payload;
 }
 
 self.onmessage = async (event: MessageEvent<BosWorkerLoadRequest>) => {
@@ -238,13 +224,13 @@ self.onmessage = async (event: MessageEvent<BosWorkerLoadRequest>) => {
     if (!request || request.type !== 'load') return;
 
     try {
-        const payload = await loadBosTables(request.source, request.options, request.id);
+        const payload = await loadBosTables(request);
         const message: BosWorkerDoneMessage = {
             id: request.id,
             type: 'done',
             payload
         };
-        self.postMessage(message, collectTransfers(payload));
+        workerScope.postMessage(message, collectTransfers(payload));
     } catch (error) {
         const asError = error as Error;
         const errorMessage: BosWorkerErrorMessage = {
@@ -253,6 +239,6 @@ self.onmessage = async (event: MessageEvent<BosWorkerLoadRequest>) => {
             message: asError.message || 'Unknown BOS worker error',
             stack: asError.stack
         };
-        self.postMessage(errorMessage);
+        workerScope.postMessage(errorMessage);
     }
 };
