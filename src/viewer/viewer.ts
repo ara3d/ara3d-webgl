@@ -73,7 +73,6 @@ export class Viewer {
     // requestRender schedules a single frame; animate decides whether to keep
     // scheduling based on camera/scene changes and stops the clock when idle.
     requestRender() {
-        const startedAt = perfNow();
         if (!this.running) return;
         if (this.updateId !== null) return;
         if (!this.clock.running) {
@@ -81,44 +80,26 @@ export class Viewer {
             this.clock.getDelta();
         }
         this.updateId = requestAnimationFrame(this.animate);
-        perfDuration('viewer.requestRender.schedule', startedAt, {
-            hasPendingFrame: this.updateId !== null
-        });
     }
 
     // Single-frame tick: update camera, render if needed, and reschedule if
     // camera/scene changes are still in progress (e.g. lerp or input).
     private animate = () => {
-        const frameStartedAt = perfNow();
         if (!this.running) return;
         this.updateId = null;
-        const cameraUpdateStartedAt = perfNow();
         const dt = this.clock.getDelta();
         const camChanged = this.camera.update(dt);
-        const cameraUpdateDurationMs = perfDuration(
-            'viewer.animate.cameraUpdate',
-            cameraUpdateStartedAt,
-            { dt }
-        );
+
         if (camChanged) {
             this.renderer.needsUpdate = true;
         }
-        const renderStartedAt = perfNow();
         this.renderer.render();
-        const renderDurationMs = perfDuration('viewer.animate.rendererRender', renderStartedAt, {
-            camChanged
-        });
+
         if (camChanged || this.renderer.needsUpdate) {
             this.requestRender();
         } else {
             this.clock.stop();
         }
-        perfLongTask('viewer.animate.longTask', frameStartedAt, 32, {
-            camChanged,
-            rendererNeedsUpdate: this.renderer.needsUpdate,
-            cameraUpdateDurationMs,
-            renderDurationMs
-        });
     };
 
     // Mark scene dirty and schedule a render for new content.
@@ -131,7 +112,7 @@ export class Viewer {
         }
         perfDuration('viewer.add', startedAt, {
             childCount: this.scene.children.length,
-            frameCamera
+            frameCamera,
         });
     }
 
@@ -141,7 +122,7 @@ export class Viewer {
         this.requestRender();
         this.renderer.remove(obj);
         perfDuration('viewer.remove', startedAt, {
-            childCount: this.scene.children.length
+            childCount: this.scene.children.length,
         });
     }
 
@@ -151,7 +132,7 @@ export class Viewer {
         this.renderer.clear();
         this.requestRender();
         perfDuration('viewer.clear', startedAt, {
-            childCount: this.scene.children.length
+            childCount: this.scene.children.length,
         });
     }
 

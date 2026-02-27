@@ -4,7 +4,7 @@ import { compressors } from 'hyparquet-compressors';
 import BimOpenSchemaWorker from './bimOpenSchema.worker?worker&inline';
 import BimOpenSchemaZipWorker from './bimOpenSchemaZip.worker?worker&inline';
 import { BimGeometry } from './bimGeometry';
-import { buildInstances } from './buildInstances';
+import { buildInstances, buildInstancesAsync } from './buildInstances';
 import { BimData } from './bimData';
 import { BimEntities } from './bimEntities';
 import { BimQuery } from './bimQuery';
@@ -14,6 +14,8 @@ import { BimParameterTable } from './BimParameterTable';
 export type BimLoaderOptions = {
     loadParameters: boolean;
     renderMode?: 'view-state' | 'legacy-rebuild';
+    decodeMode?: 'workers' | 'main-thread';
+    instanceBuildMode?: 'sync' | 'worker';
 };
 
 type TableData = Record<string, unknown>;
@@ -179,10 +181,11 @@ class BimOpenSchemaWorkerClient {
             workerTag: this.workerTag,
             files
         };
+        const transfers = Object.values(files);
 
         return new Promise<BosTablesPayload>((resolve, reject) => {
             this.pending.set(id, { resolve, reject });
-            this.worker.postMessage(message);
+            this.worker.postMessage(message, transfers);
         });
     }
 }
@@ -471,7 +474,13 @@ async function loadBimDataFromSourceMainThread(source: string, options: BimLoade
 }
 
 async function finalizeBimData(bimData: BimData, options: BimLoaderOptions): Promise<BimData> {
-    bimData.Instances = buildInstances(bimData.BimGeometry);
+    const instanceBuildMode =
+        options?.instanceBuildMode ??
+        (options?.decodeMode === 'workers' ? 'worker' : 'sync');
+    bimData.Instances =
+        instanceBuildMode === 'worker'
+            ? await buildInstancesAsync(bimData.BimGeometry, 'worker')
+            : buildInstances(bimData.BimGeometry);
     bimData.Query = new BimQuery(bimData);
     bimData.Resolver = bimData.Query.Resolver;
     if (options?.renderMode === 'view-state') {
@@ -490,6 +499,10 @@ export class BimOpenSchemaLoader {
         const totalTimer = `[BOS loader] total geometry load ${source}`;
         console.time(totalTimer);
         try {
+            if (options?.decodeMode === 'main-thread') {
+                const mainThreadData = await loadBimDataFromSourceMainThread(source, options);
+                return await finalizeBimData(mainThreadData, options);
+            }
             const clients = getWorkerClients();
             const extractedFiles = await getZipWorkerClient().extract(
                 source,
