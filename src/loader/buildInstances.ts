@@ -7,6 +7,7 @@ export type Instance = {
     isIdentity: boolean;
     instance: InstanceIndex;
     entity: EntityIndex;
+    materialId: number;
     geometry: THREE.BufferGeometry;
     material: THREE.Material;
     transform: THREE.Matrix4;
@@ -43,6 +44,7 @@ export function buildInstances(bg: BimGeometry): Array<Instance | undefined> {
             instance: i as InstanceIndex,
             geometry,
             material,
+            materialId: bg.InstanceMaterialIndex[i],
             transform,
             entity,
             isIdentity
@@ -122,6 +124,7 @@ function computeMaterials(bim: BimGeometry)
             metalness,
             side: THREE.DoubleSide,
         });
+        (mat as any).Id = mi;
 
         materials[mi] = mat;
     }

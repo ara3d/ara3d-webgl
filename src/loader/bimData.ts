@@ -8,6 +8,7 @@ import { BimEntities } from './bimEntities';
 import { BimParameterTable } from './BimParameterTable';
 import { BimParameterDescriptors } from './BimParameterDescriptors';
 import { perfDuration, perfLongTask, perfNow } from '../perf/perf';
+import { buildViewStateRuntime, ViewStateRuntime } from '../renderState/viewStateRuntime';
 
 // Type-safe indexers 
 export type EntityIndex = number & { __brand: "EntityIndex" };
@@ -25,6 +26,7 @@ export class BimData
     Resolver: BimResolver;
     Query: BimQuery;
     Instances: Array<Instance | undefined>;
+    ViewState: ViewStateRuntime | null = null;
     
     Descriptors: BimParameterDescriptors
     IntegerParameters: BimParameterTable;
@@ -32,6 +34,16 @@ export class BimData
     EntityParameters: BimParameterTable;
     SingleParameters: BimParameterTable;
     PointParameters: BimParameterTable;
+
+    buildViewStateGeometry(instances: Array<Instance | undefined>): THREE.Group
+    {
+       const startedAt = perfNow();
+       this.ViewState = buildViewStateRuntime(instances);
+       perfDuration('bimData.buildViewStateGeometry', startedAt, {
+            sourceInstanceCount: instances.length
+       });
+       return this.ViewState.model.group;
+    }
 
     rebuildGeometry(instances: Array<Instance | undefined>): THREE.Group
     {

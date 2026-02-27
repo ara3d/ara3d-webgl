@@ -13,6 +13,7 @@ import { BimParameterTable } from './BimParameterTable';
 
 export type BimLoaderOptions = {
     loadParameters: boolean;
+    renderMode?: 'view-state' | 'legacy-rebuild';
 };
 
 type TableData = Record<string, unknown>;
@@ -469,10 +470,14 @@ async function loadBimDataFromSourceMainThread(source: string, options: BimLoade
     return loadBimDataFromZipMainThread(zip, options);
 }
 
-async function finalizeBimData(bimData: BimData): Promise<BimData> {
+async function finalizeBimData(bimData: BimData, options: BimLoaderOptions): Promise<BimData> {
     bimData.Instances = buildInstances(bimData.BimGeometry);
     bimData.Query = new BimQuery(bimData);
     bimData.Resolver = bimData.Query.Resolver;
+    if (options?.renderMode === 'view-state') {
+        bimData.ThreeGeometry = bimData.buildViewStateGeometry(bimData.Instances);
+        return bimData;
+    }
     bimData.ThreeGeometry = await bimData.rebuildGeometryAsync(bimData.Instances);
     return bimData;
 }
@@ -500,7 +505,7 @@ export class BimOpenSchemaLoader {
                 clients.others.decode(otherFiles)
             ]);
             const payload = mergePayloads([vertexPayload, indexPayload, othersPayload]);
-            return await finalizeBimData(materializeBimData(payload));
+            return await finalizeBimData(materializeBimData(payload), options);
         } finally {
             console.timeEnd(totalTimer);
         }
