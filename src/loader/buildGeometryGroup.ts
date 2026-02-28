@@ -50,6 +50,18 @@ type PendingMergeRequest = {
     reject: (error: Error) => void;
 };
 
+function collectTaskTransfers(tasks: MergeTask[]): Transferable[] {
+    const transfers: Transferable[] = [];
+    for (const task of tasks) {
+        for (const instance of task.instances) {
+            transfers.push(instance.transform.buffer);
+            transfers.push(instance.positions.buffer);
+            transfers.push(instance.indices.buffer);
+        }
+    }
+    return transfers;
+}
+
 class BuildGeometryMergeWorkerClient {
     private readonly worker: Worker;
     private readonly pending = new Map<number, PendingMergeRequest>();
@@ -80,14 +92,23 @@ class BuildGeometryMergeWorkerClient {
     merge(tasks: MergeTask[]): Promise<MergeTaskResult[]> {
         if (tasks.length === 0) return Promise.resolve([]);
         const id = this.nextRequestId++;
+        const transfers = collectTaskTransfers(tasks);
         return new Promise<MergeTaskResult[]>((resolve, reject) => {
             this.pending.set(id, { resolve, reject });
             this.worker.postMessage({
                 id,
                 type: 'merge',
                 tasks
-            });
+            }, transfers);
         });
+    }
+
+    dispose(): void {
+        for (const pending of this.pending.values()) {
+            pending.reject(new Error('buildGeometry merge worker disposed'));
+        }
+        this.pending.clear();
+        this.worker.terminate();
     }
 }
 
@@ -98,6 +119,12 @@ function getMergeWorkerClient(): BuildGeometryMergeWorkerClient {
         mergeWorkerClient = new BuildGeometryMergeWorkerClient();
     }
     return mergeWorkerClient;
+}
+
+export function disposeMergeWorkerClient(): void {
+    if (!mergeWorkerClient) return;
+    mergeWorkerClient.dispose();
+    mergeWorkerClient = null;
 }
 
 export function buildGeometry(instances: Array<Instance | undefined>): THREE.Group {

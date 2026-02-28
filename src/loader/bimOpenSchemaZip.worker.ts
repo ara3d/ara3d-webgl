@@ -1,34 +1,13 @@
 import JSZip from 'jszip';
+import {
+    BosZipWorkerDoneMessage,
+    BosZipWorkerErrorMessage,
+    BosZipWorkerLoadRequest as ZipWorkerLoadRequest,
+    BosZipWorkerProgressMessage as ZipWorkerProgressMessage
+} from './bosWorkerProtocol';
 
 const workerScope = self as unknown as {
     postMessage: (message: unknown, transfer?: Transferable[]) => void;
-};
-
-type ZipWorkerLoadRequest = {
-    id: number;
-    type: 'zip-load';
-    source: string;
-    tables: string[];
-};
-
-type ZipWorkerProgressMessage = {
-    id: number;
-    type: 'progress';
-    label: string;
-    durationMs: number;
-};
-
-type ZipWorkerDoneMessage = {
-    id: number;
-    type: 'done';
-    payload: Record<string, ArrayBuffer>;
-};
-
-type ZipWorkerErrorMessage = {
-    id: number;
-    type: 'error';
-    message: string;
-    stack?: string;
 };
 
 async function getZipFromSource(source: string): Promise<JSZip> {

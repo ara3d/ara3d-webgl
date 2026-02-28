@@ -113,6 +113,14 @@ class BuildInstancesWorkerClient {
             this.worker.postMessage(message, transfers);
         });
     }
+
+    dispose(): void {
+        for (const pending of this.pending.values()) {
+            pending.reject(new Error('buildInstances worker disposed'));
+        }
+        this.pending.clear();
+        this.worker.terminate();
+    }
 }
 
 let buildInstancesWorkerClient: BuildInstancesWorkerClient | null = null;
@@ -122,6 +130,12 @@ function getBuildInstancesWorkerClient(): BuildInstancesWorkerClient {
         buildInstancesWorkerClient = new BuildInstancesWorkerClient();
     }
     return buildInstancesWorkerClient;
+}
+
+export function disposeBuildInstancesWorkerClient(): void {
+    if (!buildInstancesWorkerClient) return;
+    buildInstancesWorkerClient.dispose();
+    buildInstancesWorkerClient = null;
 }
 
 export function buildInstances(bg: BimGeometry): Array<Instance | undefined> {
@@ -166,6 +180,18 @@ export function buildInstances(bg: BimGeometry): Array<Instance | undefined> {
 }
 
 export async function buildInstancesAsync(
+    bg: BimGeometry,
+    mode: 'sync' | 'worker' = 'sync'
+): Promise<Array<Instance | undefined>> {
+    // Backward-compatible wrapper. In worker mode this consumes/transfers `bg` buffers.
+    return buildInstancesAsyncConsumeGeometry(bg, mode);
+}
+
+/**
+ * Builds instances asynchronously. In `'worker'` mode the input geometry buffers are transferred
+ * to the worker and therefore detached on the caller side.
+ */
+export async function buildInstancesAsyncConsumeGeometry(
     bg: BimGeometry,
     mode: 'sync' | 'worker' = 'sync'
 ): Promise<Array<Instance | undefined>> {

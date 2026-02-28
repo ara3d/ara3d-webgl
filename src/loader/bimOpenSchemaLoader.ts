@@ -4,12 +4,26 @@ import { compressors } from 'hyparquet-compressors';
 import BimOpenSchemaWorker from './bimOpenSchema.worker?worker&inline';
 import BimOpenSchemaZipWorker from './bimOpenSchemaZip.worker?worker&inline';
 import { BimGeometry } from './bimGeometry';
-import { buildInstances, buildInstancesAsync } from './buildInstances';
+import { buildInstances, buildInstancesAsyncConsumeGeometry } from './buildInstances';
 import { BimData } from './bimData';
 import { BimEntities } from './bimEntities';
 import { BimQuery } from './bimQuery';
 import { BimParameterDescriptors } from './BimParameterDescriptors';
 import { BimParameterTable } from './BimParameterTable';
+import {
+    BosTablesPayload,
+    BosWorkerDecodeRequest,
+    BosWorkerMessage,
+    BosZipWorkerLoadRequest,
+    BosZipWorkerMessage,
+    INDEX_TABLES,
+    OTHER_TABLES_BASE,
+    PARAMETER_TABLES,
+    REQUIRED_GEOMETRY_TABLES,
+    TableData,
+    TypedArrayCtor,
+    VERTEX_TABLES
+} from './bosWorkerProtocol';
 
 export type BimLoaderOptions = {
     loadParameters: boolean;
@@ -17,80 +31,6 @@ export type BimLoaderOptions = {
     decodeMode?: 'workers' | 'main-thread';
     instanceBuildMode?: 'sync' | 'worker';
 };
-
-type TableData = Record<string, unknown>;
-
-type BosWorkerDecodeRequest = {
-    id: number;
-    type: 'decode';
-    workerTag: string;
-    files: Record<string, ArrayBuffer>;
-};
-
-type BosZipWorkerLoadRequest = {
-    id: number;
-    type: 'zip-load';
-    source: string;
-    tables: string[];
-};
-
-type BosWorkerProgressMessage = {
-    id: number;
-    type: 'progress';
-    label: string;
-    durationMs: number;
-};
-
-type BosWorkerDoneMessage = {
-    id: number;
-    type: 'done';
-    payload: BosTablesPayload;
-};
-
-type BosWorkerErrorMessage = {
-    id: number;
-    type: 'error';
-    message: string;
-    stack?: string;
-};
-
-type BosWorkerMessage =
-    | BosWorkerProgressMessage
-    | BosWorkerDoneMessage
-    | BosWorkerErrorMessage;
-
-type BosZipWorkerDoneMessage = {
-    id: number;
-    type: 'done';
-    payload: Record<string, ArrayBuffer>;
-};
-
-type BosZipWorkerProgressMessage = {
-    id: number;
-    type: 'progress';
-    label: string;
-    durationMs: number;
-};
-
-type BosZipWorkerErrorMessage = {
-    id: number;
-    type: 'error';
-    message: string;
-    stack?: string;
-};
-
-type BosZipWorkerMessage =
-    | BosZipWorkerDoneMessage
-    | BosZipWorkerProgressMessage
-    | BosZipWorkerErrorMessage;
-
-type BosTablesPayload = Record<string, TableData>;
-
-type TypedArrayCtor =
-    | Int32ArrayConstructor
-    | Uint32ArrayConstructor
-    | Uint8ArrayConstructor
-    | Float32ArrayConstructor;
 
 type PendingWorkerRequest = {
     resolve: (payload: BosTablesPayload) => void;
@@ -104,10 +44,12 @@ type PendingZipWorkerRequest = {
 
 type BosWorkerClientLike = {
     decode(files: Record<string, ArrayBuffer>): Promise<BosTablesPayload>;
+    dispose?: () => void;
 };
 
 type BosZipWorkerClientLike = {
     extract(source: string, tables: string[]): Promise<Record<string, ArrayBuffer>>;
+    dispose?: () => void;
 };
 
 type BosWorkerClients = {
@@ -115,27 +57,6 @@ type BosWorkerClients = {
     index: BosWorkerClientLike;
     others: BosWorkerClientLike;
 };
-
-const REQUIRED_GEOMETRY_TABLES = [
-    'Instances',
-    'VertexBuffer',
-    'IndexBuffer',
-    'Meshes',
-    'Materials',
-    'Transforms'
-] as const;
-
-const VERTEX_TABLES = ['VertexBuffer'];
-const INDEX_TABLES = ['IndexBuffer'];
-const OTHER_TABLES_BASE = ['Instances', 'Meshes', 'Materials', 'Transforms', 'Entities', 'Strings'];
-const PARAMETER_TABLES = [
-    'Descriptors',
-    'IntegerParameters',
-    'SingleParameters',
-    'StringParameters',
-    'EntityParameters',
-    'PointParameters'
-];
 
 class BimOpenSchemaWorkerClient {
     private readonly worker: Worker;
@@ -188,6 +109,14 @@ class BimOpenSchemaWorkerClient {
             this.worker.postMessage(message, transfers);
         });
     }
+
+    dispose(): void {
+        for (const request of this.pending.values()) {
+            request.reject(new Error('BOS worker disposed'));
+        }
+        this.pending.clear();
+        this.worker.terminate();
+    }
 }
 
 class BimOpenSchemaZipWorkerClient {
@@ -236,6 +165,14 @@ class BimOpenSchemaZipWorkerClient {
             this.pending.set(id, { resolve, reject });
             this.worker.postMessage(message);
         });
+    }
+
+    dispose(): void {
+        for (const request of this.pending.values()) {
+            request.reject(new Error('BOS zip worker disposed'));
+        }
+        this.pending.clear();
+        this.worker.terminate();
     }
 }
 
@@ -479,7 +416,7 @@ async function finalizeBimData(bimData: BimData, options: BimLoaderOptions): Pro
         (options?.decodeMode === 'workers' ? 'worker' : 'sync');
     bimData.Instances =
         instanceBuildMode === 'worker'
-            ? await buildInstancesAsync(bimData.BimGeometry, 'worker')
+            ? await buildInstancesAsyncConsumeGeometry(bimData.BimGeometry, 'worker')
             : buildInstances(bimData.BimGeometry);
     bimData.Query = new BimQuery(bimData);
     bimData.Resolver = bimData.Query.Resolver;
@@ -539,4 +476,17 @@ export function __setWorkerClientsForTests(clients: BosWorkerClients | null): vo
 
 export function __setZipWorkerClientForTests(client: BosZipWorkerClientLike | null): void {
     zipWorkerClientOverride = client;
+}
+
+export function disposeBimOpenSchemaWorkers(): void {
+    if (workerClients) {
+        workerClients.vertex.dispose?.();
+        workerClients.index.dispose?.();
+        workerClients.others.dispose?.();
+        workerClients = null;
+    }
+    if (zipWorkerClient) {
+        zipWorkerClient.dispose?.();
+        zipWorkerClient = null;
+    }
 }

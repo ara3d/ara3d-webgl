@@ -1,63 +1,19 @@
 import { parquetRead, parquetMetadataAsync, ColumnData } from 'hyparquet';
 import { compressors } from 'hyparquet-compressors';
+import {
+    BOS_TABLE_CONFIG,
+    BosTablesPayload,
+    BosWorkerDecodeRequest,
+    BosWorkerDoneMessage,
+    BosWorkerErrorMessage,
+    BosWorkerProgressMessage,
+    TableData,
+    TypedArrayCtor
+} from './bosWorkerProtocol';
 
 const workerScope = self as unknown as {
     postMessage: (message: unknown, transfer?: Transferable[]) => void;
 };
-
-type TableData = Record<string, unknown>;
-
-type BosWorkerDecodeRequest = {
-    id: number;
-    type: 'decode';
-    workerTag: string;
-    files: Record<string, ArrayBuffer>;
-};
-
-type BosTablesPayload = Record<string, TableData>;
-
-type BosWorkerProgressMessage = {
-    id: number;
-    type: 'progress';
-    label: string;
-    durationMs: number;
-};
-
-type BosWorkerDoneMessage = {
-    id: number;
-    type: 'done';
-    payload: BosTablesPayload;
-};
-
-type BosWorkerErrorMessage = {
-    id: number;
-    type: 'error';
-    message: string;
-    stack?: string;
-};
-
-type TypedArrayCtor =
-    | Int32ArrayConstructor
-    | Uint32ArrayConstructor
-    | Uint8ArrayConstructor
-    | Float32ArrayConstructor;
-
-const TABLE_CONFIG = new Map<string, TypedArrayCtor | null>([
-    ['Instances', Int32Array],
-    ['VertexBuffer', Int32Array],
-    ['IndexBuffer', Uint32Array],
-    ['Meshes', Int32Array],
-    ['Materials', Uint8Array],
-    ['Transforms', Float32Array],
-    ['Entities', Int32Array],
-    ['Strings', null],
-    ['Descriptors', Int32Array],
-    ['IntegerParameters', Int32Array],
-    ['SingleParameters', Int32Array],
-    ['StringParameters', Int32Array],
-    ['EntityParameters', Int32Array],
-    ['PointParameters', Int32Array]
-]);
 
 function maybeConvertColumn(
     data: ColumnData['columnData'],
@@ -141,7 +97,7 @@ async function decodeBosTables(request: BosWorkerDecodeRequest): Promise<BosTabl
     const { id, workerTag, files } = request;
     const payload: BosTablesPayload = {};
     for (const [tableName, file] of Object.entries(files)) {
-        const ctor = TABLE_CONFIG.get(tableName);
+        const ctor = BOS_TABLE_CONFIG.get(tableName);
         if (ctor === undefined) {
             throw new Error(`Unknown table "${tableName}" requested.`);
         }
