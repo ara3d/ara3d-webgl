@@ -10,12 +10,15 @@ export class SelectionOverlayHelper {
     private readonly edgeColor: number;
     private readonly edgeThresholdDeg: number;
     private readonly edgeElementLimit: number;
+    private readonly fillOpacity: number;
 
     constructor(options?: {
+        fillOpacity?: number;
         edgeColor?: number;
         edgeThresholdDeg?: number;
         edgeElementLimit?: number;
     }) {
+        this.fillOpacity = options?.fillOpacity ?? SELECTION_OVERLAY_FILL_OPACITY;
         this.edgeColor = options?.edgeColor ?? SELECTION_EDGE_COLOR;
         this.edgeThresholdDeg = options?.edgeThresholdDeg ?? SELECTION_EDGE_THRESHOLD_DEG;
         this.edgeElementLimit = options?.edgeElementLimit ?? SELECTION_EDGE_ELEMENT_LIMIT;
@@ -23,7 +26,7 @@ export class SelectionOverlayHelper {
 
     createSelectionFillMaterial(
         colorString: string,
-        opacity = SELECTION_OVERLAY_FILL_OPACITY
+        opacity = this.fillOpacity
     ): THREE.MeshStandardMaterial {
         return new THREE.MeshStandardMaterial({
             color: new THREE.Color(colorString),

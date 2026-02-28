@@ -8,35 +8,79 @@ type ViewStateMaterialOptions = {
     transparentPass: boolean;
 };
 
-export function createViewStateMaterial(options: ViewStateMaterialOptions): THREE.MeshStandardMaterial {
+export type ViewStateSelectionUniforms = {
+    // Fill tint color applied to selected elements.
+    color: THREE.Color;
+    // Constant fill blend [0..1] for all selected fragments.
+    // 0 = keep original shaded color, 1 = fully replace with `color`.
+    mix: number;
+};
+
+export function setViewStateMaterialSelectionColor(
+    material: THREE.Material | null | undefined,
+    color: THREE.ColorRepresentation
+): void {
+    if (!material) return;
+    const uniforms = (
+        material.userData as {
+            viewStateSelectionUniforms?: ViewStateSelectionUniforms;
+        }
+    ).viewStateSelectionUniforms;
+    if (!uniforms) return;
+    uniforms.color.set(color);
+}
+
+export function createViewStateMaterial(
+    options: ViewStateMaterialOptions
+): THREE.MeshStandardMaterial {
+    const selectionUniforms = {
+        color: new THREE.Color(0xffff00),
+        // Base fill tint amount across the whole selected surface.
+        mix: 1,
+    };
     const material = new THREE.MeshStandardMaterial({
         color: 0xffffff,
         roughness: 0.7,
         metalness: 0.1,
         transparent: options.transparentPass,
         depthWrite: !options.transparentPass,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
     });
+    material.userData.viewStateSelectionUniforms = selectionUniforms;
 
     material.onBeforeCompile = (shader) => {
-        shader.uniforms.uBaseMaterialTex = { value: options.textures.baseMaterial };
+        shader.uniforms.uBaseMaterialTex = {
+            value: options.textures.baseMaterial,
+        };
         shader.uniforms.uViewFlagsTex = { value: options.textures.flags };
-        shader.uniforms.uColorOverridesTex = { value: options.textures.colorOverrides };
-        shader.uniforms.uInstanceCount = { value: Math.max(1, options.instanceCount) };
-        shader.uniforms.uMaterialCount = { value: Math.max(1, options.materialCount) };
-        shader.uniforms.uViewFlagsTexWidth = { value: Math.max(1, options.textures.flags.image.width) };
-        shader.uniforms.uViewFlagsTexHeight = { value: Math.max(1, options.textures.flags.image.height) };
+        shader.uniforms.uColorOverridesTex = {
+            value: options.textures.colorOverrides,
+        };
+        shader.uniforms.uSelectionColor = { value: selectionUniforms.color };
+        shader.uniforms.uSelectionMix = { value: selectionUniforms.mix };
+        shader.uniforms.uInstanceCount = {
+            value: Math.max(1, options.instanceCount),
+        };
+        shader.uniforms.uMaterialCount = {
+            value: Math.max(1, options.materialCount),
+        };
+        shader.uniforms.uViewFlagsTexWidth = {
+            value: Math.max(1, options.textures.flags.image.width),
+        };
+        shader.uniforms.uViewFlagsTexHeight = {
+            value: Math.max(1, options.textures.flags.image.height),
+        };
         shader.uniforms.uColorOverridesTexWidth = {
-            value: Math.max(1, options.textures.colorOverrides.image.width)
+            value: Math.max(1, options.textures.colorOverrides.image.width),
         };
         shader.uniforms.uColorOverridesTexHeight = {
-            value: Math.max(1, options.textures.colorOverrides.image.height)
+            value: Math.max(1, options.textures.colorOverrides.image.height),
         };
         shader.uniforms.uBaseMaterialTexWidth = {
-            value: Math.max(1, options.textures.baseMaterial.image.width)
+            value: Math.max(1, options.textures.baseMaterial.image.width),
         };
         shader.uniforms.uBaseMaterialTexHeight = {
-            value: Math.max(1, options.textures.baseMaterial.image.height)
+            value: Math.max(1, options.textures.baseMaterial.image.height),
         };
 
         shader.vertexShader = shader.vertexShader
@@ -62,6 +106,8 @@ vMaterialId = materialId;`
 uniform sampler2D uBaseMaterialTex;
 uniform sampler2D uViewFlagsTex;
 uniform sampler2D uColorOverridesTex;
+uniform vec3 uSelectionColor;
+uniform float uSelectionMix;
 uniform float uInstanceCount;
 uniform float uMaterialCount;
 uniform float uViewFlagsTexWidth;
@@ -118,7 +164,8 @@ if (isGhosted) {
 }
 
 if (isSelected) {
-    finalBaseColor = mix(finalBaseColor, vec3(1.0, 0.8, 0.0), 0.65);
+    float fillMix = clamp(uSelectionMix, 0.0, 1.0);
+    finalBaseColor = mix(finalBaseColor, uSelectionColor, fillMix);
 }
 
 if (!isVisible) {
@@ -130,7 +177,7 @@ vec4 diffuseColor = vec4(finalBaseColor, finalOpacity);`
     };
 
     material.customProgramCacheKey = () =>
-        `view-state-${options.transparentPass ? 'transparent' : 'opaque'}-v1`;
+        `view-state-${options.transparentPass ? 'transparent' : 'opaque'}-v3`;
 
     return material;
 }

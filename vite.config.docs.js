@@ -18,6 +18,7 @@ export default defineConfig({
                 exampleBosFilters: resolve(__dirname, 'examples/example-bos-filters.html'),
                 exampleBosLevelColors: resolve(__dirname, 'examples/example-bos-level-colors.html'),
                 exampleBosSelection: resolve(__dirname, 'examples/example-bos-selection.html'),
+                exampleBosSelectionShader: resolve(__dirname, 'examples/example-bos-selection-shader.html'),
                 exampleBos: resolve(__dirname, 'examples/example-bos.html'),
             },
         },
