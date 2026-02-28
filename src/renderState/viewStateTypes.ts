@@ -4,7 +4,9 @@ import { InstanceIndex } from '../loader/bimData';
 export const enum ViewStateFlag {
     Visible = 1 << 0,
     Selected = 1 << 1,
-    Ghosted = 1 << 2
+    Ghosted = 1 << 2,
+    OpacityOverride = 1 << 3,
+    ColorOverride = 1 << 4
 }
 
 export type ViewStateTextures = {

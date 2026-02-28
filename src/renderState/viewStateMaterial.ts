@@ -198,16 +198,22 @@ float rawFlags = floor(stateFlags.r * 255.0 + 0.5);
 bool isVisible = mod(rawFlags, 2.0) >= 1.0;
 bool isSelected = mod(floor(rawFlags / 2.0), 2.0) >= 1.0;
 bool isGhosted = mod(floor(rawFlags / 4.0), 2.0) >= 1.0;
+bool hasOpacityOverride = mod(floor(rawFlags / 8.0), 2.0) >= 1.0;
+bool hasColorOverride = mod(floor(rawFlags / 16.0), 2.0) >= 1.0;
 
 vec3 finalBaseColor = baseMaterial.rgb;
 float finalOpacity = baseMaterial.a;
 
-if (colorOverride.a > 0.5) {
+if (hasColorOverride) {
     finalBaseColor = colorOverride.rgb;
 }
 
 if (isGhosted) {
     finalOpacity = min(finalOpacity, 0.2);
+}
+
+if (hasOpacityOverride) {
+    finalOpacity = min(finalOpacity, colorOverride.a);
 }
 
 if (isSelected) {

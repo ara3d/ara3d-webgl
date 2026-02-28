@@ -47,7 +47,11 @@ describe('viewStateMaterial selection style', () => {
             transparentPass: false
         });
 
-        const shader = { uniforms: {}, vertexShader: '', fragmentShader: '' } as any;
+        const shader = {
+            uniforms: {},
+            vertexShader: '#include <common>\n#include <begin_vertex>',
+            fragmentShader: '#include <common>\nvec4 diffuseColor = vec4( diffuse, opacity );'
+        } as any;
         material.onBeforeCompile?.(shader);
         setViewStateMaterialSelectionMix(material, 0.42);
 
@@ -78,5 +82,28 @@ describe('viewStateMaterial selection style', () => {
         ).viewStateSelectionUniforms;
         expect(uniforms.color.getHexString()).toBe('3366ff');
         expect(uniforms.mix).toBe(1);
+    });
+
+    it('supports separate color and opacity override flags in shader logic', () => {
+        const material = createViewStateMaterial({
+            textures: {
+                baseMaterial: createTexture(),
+                flags: createTexture(),
+                colorOverrides: createTexture()
+            },
+            instanceCount: 1,
+            materialCount: 1,
+            transparentPass: false
+        });
+
+        const shader = {
+            uniforms: {},
+            vertexShader: '#include <common>\n#include <begin_vertex>',
+            fragmentShader: '#include <common>\nvec4 diffuseColor = vec4( diffuse, opacity );'
+        } as any;
+        material.onBeforeCompile?.(shader);
+
+        expect(shader.fragmentShader.includes('hasOpacityOverride')).toBe(true);
+        expect(shader.fragmentShader.includes('hasColorOverride')).toBe(true);
     });
 });
