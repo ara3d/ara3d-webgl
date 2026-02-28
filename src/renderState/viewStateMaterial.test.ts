@@ -105,5 +105,7 @@ describe('viewStateMaterial selection style', () => {
 
         expect(shader.fragmentShader.includes('hasOpacityOverride')).toBe(true);
         expect(shader.fragmentShader.includes('hasColorOverride')).toBe(true);
+        expect(shader.fragmentShader.includes('uTransparentPass')).toBe(true);
+        expect(shader.fragmentShader.includes('gl_FragCoord')).toBe(true);
     });
 });

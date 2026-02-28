@@ -105,6 +105,9 @@ export function createViewStateMaterial(
         (
             material.userData as ViewStateSelectionMaterialUserData
         ).viewStateSelectionMixUniform = shader.uniforms.uSelectionMix as { value: number };
+        shader.uniforms.uTransparentPass = {
+            value: options.transparentPass ? 1 : 0,
+        };
         shader.uniforms.uInstanceCount = {
             value: Math.max(1, options.instanceCount),
         };
@@ -155,6 +158,7 @@ uniform sampler2D uViewFlagsTex;
 uniform sampler2D uColorOverridesTex;
 uniform vec3 uSelectionColor;
 uniform float uSelectionMix;
+uniform float uTransparentPass;
 uniform float uInstanceCount;
 uniform float uMaterialCount;
 uniform float uViewFlagsTexWidth;
@@ -223,6 +227,17 @@ if (isSelected) {
 
 if (!isVisible) {
     discard;
+}
+
+// Opaque buckets use non-transparent materials for performance. To support
+// runtime ghosting/opacity on those buckets without rebuilding/sorting,
+// approximate alpha using ordered dithering.
+if (uTransparentPass < 0.5 && finalOpacity < 0.999) {
+    float noise = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+    if (noise > clamp(finalOpacity, 0.0, 1.0)) {
+        discard;
+    }
+    finalOpacity = 1.0;
 }
 
 vec4 diffuseColor = vec4(finalBaseColor, finalOpacity);`
