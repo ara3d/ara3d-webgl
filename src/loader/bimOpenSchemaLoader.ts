@@ -248,7 +248,7 @@ function materializeBimData(payload: BosTablesPayload): BimData {
 }
 
 function buildOtherTables(options: BimLoaderOptions): string[] {
-    const tables = [...OTHER_TABLES_BASE];
+    const tables: string[] = [...OTHER_TABLES_BASE];
     if (options?.loadParameters) {
         tables.push(...PARAMETER_TABLES);
     }
@@ -262,7 +262,7 @@ function mergePayloads(payloads: BosTablesPayload[]): BosTablesPayload {
     }, {} as BosTablesPayload);
 }
 
-function pickFiles(files: Record<string, ArrayBuffer>, tables: string[]): Record<string, ArrayBuffer> {
+function pickFiles(files: Record<string, ArrayBuffer>, tables: readonly string[]): Record<string, ArrayBuffer> {
     const selected: Record<string, ArrayBuffer> = {};
     for (const tableName of tables) {
         const buffer = files[tableName];

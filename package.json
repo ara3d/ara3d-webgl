@@ -62,6 +62,7 @@
         "ste-events": "^3.0.7",
         "ste-signals": "^3.0.9",
         "ste-simple-events": "^3.0.7",
+        "three-mesh-bvh": "^0.9.1",
         "three": "^0.182.0"
     },
     "keywords": [

@@ -8,6 +8,7 @@
     "sourceMap": true,
     "lib": ["esnext", "dom"],
     "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true
   },
   "files": [
     "./src/index.ts",
