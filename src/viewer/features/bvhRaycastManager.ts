@@ -37,6 +37,16 @@ export type BvhRaycastManagerOptions = {
     nowMs?: () => number;
 };
 
+export type BvhQueuePrecomputeOptions = {
+    shouldPrecomputeMesh?: (mesh: THREE.Mesh) => boolean;
+};
+
+export type BvhPrecomputeSnapshot = BvhLogPayload & {
+    pendingTasks: number;
+    pendingGeometries: number;
+    cacheSize: number;
+};
+
 export class BvhRaycastManager {
     private static raycastPatched = false;
     private static originalMeshRaycast:
@@ -107,7 +117,20 @@ export class BvhRaycastManager {
     }
 
     clearCache(): void {
+        for (const geometry of this.bvhCache.keys()) {
+            if ((geometry as any).boundsTree) {
+                delete (geometry as any).boundsTree;
+            }
+        }
         this.bvhCache.clear();
+    }
+
+    clearGeometryBVH(geometry: THREE.BufferGeometry): void {
+        if ((geometry as any).boundsTree) {
+            delete (geometry as any).boundsTree;
+        }
+        this.bvhCache.delete(geometry);
+        this.pendingBvhGeometries.delete(geometry);
     }
 
     resetPrecomputeQueue(): void {
@@ -125,7 +148,7 @@ export class BvhRaycastManager {
         };
     }
 
-    queuePrecomputeForGroup(group: THREE.Object3D | null): void {
+    queuePrecomputeForGroup(group: THREE.Object3D | null, options?: BvhQueuePrecomputeOptions): void {
         if (!group) return;
 
         const worker = this.ensureBvhPrecomputeWorker();
@@ -145,6 +168,7 @@ export class BvhRaycastManager {
         group.traverse((child: THREE.Object3D) => {
             const mesh = child as THREE.Mesh;
             if (!mesh.isMesh || !mesh.geometry) return;
+            if (options?.shouldPrecomputeMesh && !options.shouldPrecomputeMesh(mesh)) return;
 
             const geometry = mesh.geometry as THREE.BufferGeometry;
             const positionAttribute = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
@@ -210,6 +234,27 @@ export class BvhRaycastManager {
             completed: 0,
             failed: 0
         });
+    }
+
+    ensureGroupBvhReady(group: THREE.Object3D | null, options?: BvhQueuePrecomputeOptions): void {
+        this.queuePrecomputeForGroup(group, options);
+    }
+
+    getPrecomputeSnapshot(): BvhPrecomputeSnapshot {
+        const startedAtMs = this.bvhPrecomputeStats.startedAtMs;
+        const elapsedMs = startedAtMs > 0 ? this.nowMs() - startedAtMs : undefined;
+        return {
+            generation: this.bvhPrecomputeStats.generation,
+            queued: this.bvhPrecomputeStats.queued,
+            completed: this.bvhPrecomputeStats.completed,
+            failed: this.bvhPrecomputeStats.failed,
+            elapsedMs,
+            workerBuildTotalMs: this.bvhPrecomputeStats.workerBuildTotalMs,
+            workerBuildMaxMs: this.bvhPrecomputeStats.workerBuildMaxMs,
+            pendingTasks: this.pendingBvhTasks.size,
+            pendingGeometries: this.pendingBvhGeometries.size,
+            cacheSize: this.bvhCache.size
+        };
     }
 
     dispose(): void {
