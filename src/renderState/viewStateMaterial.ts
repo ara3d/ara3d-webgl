@@ -140,13 +140,15 @@ export function createViewStateMaterial(
 attribute float instanceId;
 attribute float materialId;
 varying float vInstanceId;
-varying float vMaterialId;`
+varying float vMaterialId;
+varying vec3 vWorldPos;`
             )
             .replace(
                 '#include <begin_vertex>',
                 `#include <begin_vertex>
 vInstanceId = instanceId;
-vMaterialId = materialId;`
+vMaterialId = materialId;
+vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;`
             );
 
         shader.fragmentShader = shader.fragmentShader
@@ -169,6 +171,7 @@ uniform float uBaseMaterialTexWidth;
 uniform float uBaseMaterialTexHeight;
 varying float vInstanceId;
 varying float vMaterialId;
+varying vec3 vWorldPos;
 
 vec4 sampleLookupPacked(sampler2D t, float id, float width, float height) {
     float ix = mod(id, width);
@@ -233,7 +236,10 @@ if (!isVisible) {
 // runtime ghosting/opacity on those buckets without rebuilding/sorting,
 // approximate alpha using ordered dithering.
 if (uTransparentPass < 0.5 && finalOpacity < 0.999) {
-    float noise = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+    vec3 worldCell = floor(vWorldPos * 32.0);
+    float noise = fract(
+        sin(dot(worldCell + vec3(vInstanceId * 0.173), vec3(12.9898, 78.233, 45.164))) * 43758.5453
+    );
     if (noise > clamp(finalOpacity, 0.0, 1.0)) {
         discard;
     }
