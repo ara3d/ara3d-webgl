@@ -21,12 +21,15 @@ type ViewStateSelectionMaterialUserData = {
     viewStateSelectionMixUniform?: { value: number };
     viewStateOpacityDitherScale?: number;
     viewStateOpacityDitherScaleUniform?: { value: number };
+    viewStateGhostOpacity?: number;
+    viewStateGhostOpacityUniform?: { value: number };
 };
 
 export type ViewStateSelectionStyle = {
     color?: THREE.ColorRepresentation;
     mix?: number;
     opacityDitherScale?: number;
+    ghostOpacity?: number;
 };
 
 function clamp01(value: number): number {
@@ -37,6 +40,11 @@ function clamp01(value: number): number {
 function clampOpacityDitherScale(value: number): number {
     if (!Number.isFinite(value)) return 32;
     return Math.max(1, Math.min(512, value));
+}
+
+function clampOpacity(value: number): number {
+    if (!Number.isFinite(value)) return 0.2;
+    return Math.max(0, Math.min(1, value));
 }
 
 function getSelectionUserData(
@@ -83,6 +91,9 @@ export function setViewStateMaterialSelectionStyle(
     if (style.opacityDitherScale !== undefined) {
         setViewStateMaterialOpacityDitherScale(material, style.opacityDitherScale);
     }
+    if (style.ghostOpacity !== undefined) {
+        setViewStateMaterialGhostOpacity(material, style.ghostOpacity);
+    }
 }
 
 export function setViewStateMaterialOpacityDitherScale(
@@ -95,6 +106,19 @@ export function setViewStateMaterialOpacityDitherScale(
     userData.viewStateOpacityDitherScale = clamped;
     if (userData.viewStateOpacityDitherScaleUniform) {
         userData.viewStateOpacityDitherScaleUniform.value = clamped;
+    }
+}
+
+export function setViewStateMaterialGhostOpacity(
+    material: THREE.Material | null | undefined,
+    opacity: number
+): void {
+    const userData = getSelectionUserData(material);
+    if (!userData) return;
+    const clamped = clampOpacity(opacity);
+    userData.viewStateGhostOpacity = clamped;
+    if (userData.viewStateGhostOpacityUniform) {
+        userData.viewStateGhostOpacityUniform.value = clamped;
     }
 }
 
@@ -118,6 +142,7 @@ export function createViewStateMaterial(
     (
         material.userData as ViewStateSelectionMaterialUserData
     ).viewStateOpacityDitherScale = 32;
+    (material.userData as ViewStateSelectionMaterialUserData).viewStateGhostOpacity = 0.2;
 
     material.onBeforeCompile = (shader) => {
         shader.uniforms.uBaseMaterialTex = {
@@ -136,6 +161,10 @@ export function createViewStateMaterial(
         };
         userData.viewStateOpacityDitherScaleUniform = shader.uniforms
             .uOpacityDitherScale as { value: number };
+        shader.uniforms.uGhostOpacity = {
+            value: userData.viewStateGhostOpacity ?? 0.2
+        };
+        userData.viewStateGhostOpacityUniform = shader.uniforms.uGhostOpacity as { value: number };
         shader.uniforms.uTransparentPass = {
             value: options.transparentPass ? 1 : 0,
         };
@@ -192,6 +221,7 @@ uniform sampler2D uColorOverridesTex;
 uniform vec3 uSelectionColor;
 uniform float uSelectionMix;
 uniform float uOpacityDitherScale;
+uniform float uGhostOpacity;
 uniform float uTransparentPass;
 uniform float uInstanceCount;
 uniform float uMaterialCount;
@@ -248,7 +278,7 @@ if (hasColorOverride) {
 }
 
 if (isGhosted) {
-    finalOpacity = min(finalOpacity, 0.2);
+    finalOpacity = min(finalOpacity, clamp(uGhostOpacity, 0.0, 1.0));
 }
 
 if (hasOpacityOverride) {

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import {
     createViewStateMaterial,
+    setViewStateMaterialGhostOpacity,
     setViewStateMaterialOpacityDitherScale,
     setViewStateMaterialSelectionColor,
     setViewStateMaterialSelectionMix,
@@ -108,6 +109,7 @@ describe('viewStateMaterial selection style', () => {
         expect(shader.fragmentShader.includes('hasColorOverride')).toBe(true);
         expect(shader.fragmentShader.includes('uTransparentPass')).toBe(true);
         expect(shader.fragmentShader.includes('uOpacityDitherScale')).toBe(true);
+        expect(shader.fragmentShader.includes('uGhostOpacity')).toBe(true);
         expect(shader.vertexShader.includes('vWorldPos')).toBe(true);
         expect(shader.fragmentShader.includes('vWorldPos')).toBe(true);
     });
@@ -160,5 +162,55 @@ describe('viewStateMaterial selection style', () => {
         expect(shader.uniforms.uOpacityDitherScale.value).toBe(128);
         const userData = material.userData as { viewStateOpacityDitherScale: number };
         expect(userData.viewStateOpacityDitherScale).toBe(128);
+    });
+
+    it('updates ghost opacity and syncs compiled shader uniform', () => {
+        const material = createViewStateMaterial({
+            textures: {
+                baseMaterial: createTexture(),
+                flags: createTexture(),
+                colorOverrides: createTexture()
+            },
+            instanceCount: 1,
+            materialCount: 1,
+            transparentPass: false
+        });
+
+        const shader = {
+            uniforms: {},
+            vertexShader: '#include <common>\n#include <begin_vertex>',
+            fragmentShader: '#include <common>\nvec4 diffuseColor = vec4( diffuse, opacity );'
+        } as any;
+        material.onBeforeCompile?.(shader);
+        setViewStateMaterialGhostOpacity(material, 0.08);
+
+        expect(shader.uniforms.uGhostOpacity.value).toBeCloseTo(0.08, 5);
+        const userData = material.userData as { viewStateGhostOpacity: number };
+        expect(userData.viewStateGhostOpacity).toBeCloseTo(0.08, 5);
+    });
+
+    it('updates ghost opacity through style helper', () => {
+        const material = createViewStateMaterial({
+            textures: {
+                baseMaterial: createTexture(),
+                flags: createTexture(),
+                colorOverrides: createTexture()
+            },
+            instanceCount: 1,
+            materialCount: 1,
+            transparentPass: false
+        });
+
+        const shader = {
+            uniforms: {},
+            vertexShader: '#include <common>\n#include <begin_vertex>',
+            fragmentShader: '#include <common>\nvec4 diffuseColor = vec4( diffuse, opacity );'
+        } as any;
+        material.onBeforeCompile?.(shader);
+        setViewStateMaterialSelectionStyle(material, { ghostOpacity: 0.06 });
+
+        expect(shader.uniforms.uGhostOpacity.value).toBeCloseTo(0.06, 5);
+        const userData = material.userData as { viewStateGhostOpacity: number };
+        expect(userData.viewStateGhostOpacity).toBeCloseTo(0.06, 5);
     });
 });
