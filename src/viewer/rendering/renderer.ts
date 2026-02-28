@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Viewport } from '../viewport';
 import { Camera } from '../camera/camera';
 import { Settings } from '../viewerSettings';
-import { perfDuration, perfLongTask, perfNow } from '../../perf/perf';
+import { perfDuration, perfNow } from '../../perf/perf';
 
 export class Renderer {
     renderer: THREE.WebGLRenderer;
@@ -71,16 +71,9 @@ export class Renderer {
 
     // Render only when the scene/camera is marked dirty, then reset the flag.
     render() {
-        const startedAt = perfNow();
         if (!this.needsUpdate && !this.camera.hasMoved) return;
         this.renderer.render(this.scene, this.camera.camPerspective.camera);
         this.needsUpdate = false;
-        perfDuration('renderer.render', startedAt, {
-            objectCount: this.scene.children.length
-        });
-        perfLongTask('renderer.render.longTask', startedAt, 32, {
-            objectCount: this.scene.children.length
-        });
     }
 
     add(target: THREE.Object3D) {
