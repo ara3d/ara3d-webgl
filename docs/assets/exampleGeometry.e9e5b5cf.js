@@ -1,4 +1,4 @@
-import { V as Viewer, ak as SphereGeometry, al as IcosahedronGeometry, am as OctahedronGeometry, an as TetrahedronGeometry, ao as PlaneGeometry, ap as BoxGeometry, aq as CircleGeometry, ar as RingGeometry, as as CylinderGeometry, at as ConeGeometry, au as TorusGeometry, av as TorusKnotGeometry, w as MeshStandardMaterial, C as Color, E as Mesh } from "./compressors.5793b060.js";
+import { n as Viewer, aF as SphereGeometry, aG as IcosahedronGeometry, aH as OctahedronGeometry, aI as TetrahedronGeometry, aJ as PlaneGeometry, aK as BoxGeometry, aL as CircleGeometry, aM as RingGeometry, aN as CylinderGeometry, aO as ConeGeometry, aP as TorusGeometry, aQ as TorusKnotGeometry, k as MeshStandardMaterial, C as Color, e as Mesh } from "./bvhPrecompute.worker.858fae95.js";
 async function runExample() {
   const viewer = new Viewer();
   const geometries = [
@@ -41,4 +41,4 @@ async function runExample() {
   }
 }
 runExample();
-//# sourceMappingURL=exampleGeometry.2311e455.js.map
+//# sourceMappingURL=exampleGeometry.e9e5b5cf.js.map

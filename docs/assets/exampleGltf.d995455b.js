@@ -1,5 +1,5 @@
-import { V as Viewer } from "./compressors.5793b060.js";
-import { G as GltfLoader } from "./gltfLoader.7c91c860.js";
+import { n as Viewer } from "./bvhPrecompute.worker.858fae95.js";
+import { G as GltfLoader } from "./gltfLoader.878a4265.js";
 async function runExample() {
   const viewer = new Viewer();
   const loader = new GltfLoader();
@@ -14,4 +14,4 @@ async function runExample() {
   console.log("Completed");
 }
 runExample();
-//# sourceMappingURL=exampleGltf.219b67de.js.map
+//# sourceMappingURL=exampleGltf.d995455b.js.map

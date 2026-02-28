@@ -4,7 +4,7 @@ var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
   return value;
 };
-import { W as Group, E as Mesh, z as BufferGeometry, B as BufferAttribute, I as InstancedMesh, ah as StaticDrawUsage, j as Matrix4, w as MeshStandardMaterial, C as Color, x as DoubleSide, k as Vector3, Q as Quaternion, ai as JSZip, aj as compressors } from "./compressors.5793b060.js";
+import { M as Matrix4, a4 as BufferGeometry, a as BufferAttribute, k as MeshStandardMaterial, C as Color, D as DoubleSide, V as Vector3, Q as Quaternion, aq as WorkerWrapper, ar as perfNow, a6 as Group, as as perfDuration, at as perfLongTask, e as Mesh, I as InstancedMesh, au as StaticDrawUsage, av as WorkerWrapper$1, A as MeshBasicMaterial, J as InstancedBufferAttribute, aw as Matrix3, ax as Float32BufferAttribute, ay as DataTexture, az as RGBAFormat, aA as UnsignedByteType, a0 as NearestFilter, aB as JSZip, aC as WorkerWrapper$2, aD as WorkerWrapper$3, aE as compressors } from "./bvhPrecompute.worker.858fae95.js";
 const ParquetTypes = [
   "BOOLEAN",
   "INT32",
@@ -1943,13 +1943,400 @@ function parquetReadAsync(options) {
   options.file = prefetchAsyncBuffer(options.file, plan);
   return plan.groups.map((groupPlan) => readRowGroup(options, plan, groupPlan));
 }
+class BuildInstancesWorkerClient {
+  constructor() {
+    __publicField(this, "worker");
+    __publicField(this, "pending", /* @__PURE__ */ new Map());
+    __publicField(this, "nextRequestId", 1);
+    this.worker = new WorkerWrapper();
+    this.worker.onmessage = (event) => {
+      const message = event.data;
+      const pending = this.pending.get(message.id);
+      if (!pending)
+        return;
+      this.pending.delete(message.id);
+      if (message.type === "done") {
+        pending.resolve(message.payload);
+        return;
+      }
+      pending.reject(new Error(message.message));
+    };
+    this.worker.onerror = (event) => {
+      for (const pending of this.pending.values()) {
+        pending.reject(new Error(event.message || "buildInstances worker crashed"));
+      }
+      this.pending.clear();
+    };
+  }
+  build(geometry) {
+    const id = this.nextRequestId++;
+    const message = {
+      id,
+      type: "build",
+      geometry
+    };
+    const transfers = [
+      geometry.InstanceEntityIndex.buffer,
+      geometry.InstanceMaterialIndex.buffer,
+      geometry.InstanceMeshIndex.buffer,
+      geometry.InstanceTransformIndex.buffer,
+      geometry.InstanceFlags.buffer,
+      geometry.VertexX.buffer,
+      geometry.VertexY.buffer,
+      geometry.VertexZ.buffer,
+      geometry.IndexBuffer.buffer,
+      geometry.MeshVertexOffset.buffer,
+      geometry.MeshIndexOffset.buffer,
+      geometry.MaterialRed.buffer,
+      geometry.MaterialGreen.buffer,
+      geometry.MaterialBlue.buffer,
+      geometry.MaterialAlpha.buffer,
+      geometry.MaterialRoughness.buffer,
+      geometry.MaterialMetallic.buffer,
+      geometry.TransformTX.buffer,
+      geometry.TransformTY.buffer,
+      geometry.TransformTZ.buffer,
+      geometry.TransformQX.buffer,
+      geometry.TransformQY.buffer,
+      geometry.TransformQZ.buffer,
+      geometry.TransformQW.buffer,
+      geometry.TransformSX.buffer,
+      geometry.TransformSY.buffer,
+      geometry.TransformSZ.buffer
+    ];
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.worker.postMessage(message, transfers);
+    });
+  }
+  dispose() {
+    for (const pending of this.pending.values()) {
+      pending.reject(new Error("buildInstances worker disposed"));
+    }
+    this.pending.clear();
+    this.worker.terminate();
+  }
+}
+let buildInstancesWorkerClient = null;
+function getBuildInstancesWorkerClient() {
+  if (!buildInstancesWorkerClient) {
+    buildInstancesWorkerClient = new BuildInstancesWorkerClient();
+  }
+  return buildInstancesWorkerClient;
+}
+function buildInstances(bg) {
+  console.time("Building instances");
+  const transforms = computeTransforms(bg);
+  const geometries = computeMeshGeometries(bg);
+  const materials = computeMaterials(bg);
+  const instanceCount = bg.InstanceMeshIndex.length;
+  const instances = new Array(instanceCount);
+  const identity = new Matrix4();
+  for (let i = 0; i < instanceCount; i++) {
+    const meshIndex = bg.InstanceMeshIndex[i];
+    if (meshIndex < 0)
+      continue;
+    const flag = bg.InstanceFlags[i];
+    if (flag & 1)
+      continue;
+    const geometry = geometries[meshIndex];
+    if (!geometry)
+      continue;
+    const material = materials[bg.InstanceMaterialIndex[i]];
+    const transform = transforms[bg.InstanceTransformIndex[i]];
+    const entity = bg.InstanceEntityIndex[i];
+    const isIdentity = transform.equals(identity);
+    instances[i] = {
+      instance: i,
+      geometry,
+      material,
+      materialId: bg.InstanceMaterialIndex[i],
+      transform,
+      entity,
+      isIdentity
+    };
+  }
+  console.timeEnd("Building instances");
+  return instances;
+}
+async function buildInstancesAsyncConsumeGeometry(bg, mode = "sync") {
+  if (typeof Worker === "undefined")
+    return buildInstances(bg);
+  if (mode !== "worker")
+    return buildInstances(bg);
+  const payload = await getBuildInstancesWorkerClient().build(bg);
+  return buildInstancesFromPrecomputed(
+    payload.geometry,
+    payload.meshPositions,
+    payload.meshNormals,
+    payload.transformMatrices,
+    payload.transformIdentity
+  );
+}
+function computeMeshGeometries(bim) {
+  const meshCount = bim.MeshVertexOffset.length;
+  const indexCount = bim.IndexBuffer.length;
+  const vertexCount = bim.VertexX.length;
+  const meshGeometries = new Array(meshCount);
+  const {
+    VertexX,
+    VertexY,
+    VertexZ,
+    IndexBuffer,
+    MeshVertexOffset,
+    MeshIndexOffset
+  } = bim;
+  for (let mi = 0; mi < meshCount; mi++) {
+    const iStart = MeshIndexOffset[mi];
+    const iEnd = mi + 1 < meshCount ? MeshIndexOffset[mi + 1] : indexCount;
+    const iCount = iEnd - iStart;
+    const vStart = MeshVertexOffset[mi];
+    const vEnd = mi + 1 < meshCount ? MeshVertexOffset[mi + 1] : vertexCount;
+    const vCount = vEnd - vStart;
+    if (iCount === 0 || vCount === 0)
+      continue;
+    const indexArray = IndexBuffer.subarray(iStart, iEnd);
+    const vertexMultiplier = 1e4;
+    const positionArray = new Float32Array(vCount * 3);
+    for (let vi = 0; vi < vCount; vi++) {
+      positionArray[vi * 3 + 0] = VertexX[vi + vStart] / vertexMultiplier;
+      positionArray[vi * 3 + 1] = VertexY[vi + vStart] / vertexMultiplier;
+      positionArray[vi * 3 + 2] = VertexZ[vi + vStart] / vertexMultiplier;
+    }
+    const geom = new BufferGeometry();
+    geom.setAttribute("position", new BufferAttribute(positionArray, 3));
+    geom.setIndex(new BufferAttribute(indexArray, 1));
+    geom.computeVertexNormals();
+    meshGeometries[mi] = geom;
+  }
+  return meshGeometries;
+}
+function computeMeshGeometriesFromPrecomputed(bim, meshPositions, meshNormals) {
+  const meshCount = bim.MeshVertexOffset.length;
+  const indexCount = bim.IndexBuffer.length;
+  const meshGeometries = new Array(meshCount);
+  for (let mi = 0; mi < meshCount; mi++) {
+    const pos = meshPositions[mi];
+    const normal = meshNormals[mi];
+    if (!pos || !normal)
+      continue;
+    const iStart = bim.MeshIndexOffset[mi];
+    const iEnd = mi + 1 < meshCount ? bim.MeshIndexOffset[mi + 1] : indexCount;
+    const indexArray = bim.IndexBuffer.subarray(iStart, iEnd);
+    if (indexArray.length === 0)
+      continue;
+    const geom = new BufferGeometry();
+    geom.setAttribute("position", new BufferAttribute(pos, 3));
+    geom.setAttribute("normal", new BufferAttribute(normal, 3));
+    geom.setIndex(new BufferAttribute(indexArray, 1));
+    meshGeometries[mi] = geom;
+  }
+  return meshGeometries;
+}
+function computeMaterials(bim) {
+  const numMaterials = bim.MaterialAlpha.length;
+  const materials = new Array(numMaterials);
+  for (let mi = 0; mi < numMaterials; mi++) {
+    const r = bim.MaterialRed[mi] / 255;
+    const g = bim.MaterialGreen[mi] / 255;
+    const b = bim.MaterialBlue[mi] / 255;
+    const a = bim.MaterialAlpha[mi] / 255;
+    const roughness = bim.MaterialRoughness[mi] / 255;
+    const metalness = bim.MaterialMetallic[mi] / 255;
+    const mat = new MeshStandardMaterial({
+      color: new Color(r, g, b),
+      opacity: a,
+      flatShading: true,
+      transparent: a < 0.999,
+      roughness,
+      metalness,
+      side: DoubleSide
+    });
+    mat.Id = mi;
+    materials[mi] = mat;
+  }
+  return materials;
+}
+function computeTransforms(bim) {
+  const {
+    TransformTX,
+    TransformTY,
+    TransformTZ,
+    TransformQX,
+    TransformQY,
+    TransformQZ,
+    TransformQW,
+    TransformSX,
+    TransformSY,
+    TransformSZ
+  } = bim;
+  const tmpPos = new Vector3();
+  const tmpQuat = new Quaternion();
+  const tmpScale = new Vector3();
+  const transformCount = TransformTX.length;
+  const matrices = new Array(transformCount);
+  for (let ti = 0; ti < transformCount; ti++) {
+    const tx = TransformTX[ti];
+    const ty = TransformTY[ti];
+    const tz = TransformTZ[ti];
+    const sx = TransformSX[ti];
+    const sy = TransformSY[ti];
+    const sz = TransformSZ[ti];
+    const qx = TransformQX[ti];
+    const qy = TransformQY[ti];
+    const qz = TransformQZ[ti];
+    const qw = TransformQW[ti];
+    const m = new Matrix4();
+    tmpPos.set(tx, ty, tz);
+    tmpQuat.set(qx, qy, qz, qw);
+    tmpScale.set(sx, sy, sz);
+    m.compose(tmpPos, tmpQuat, tmpScale);
+    matrices[ti] = m;
+  }
+  return matrices;
+}
+function computeTransformsFromPacked(matrices, identityFlags) {
+  const transformCount = identityFlags.length;
+  const transforms = new Array(transformCount);
+  for (let ti = 0; ti < transformCount; ti++) {
+    const offset = ti * 16;
+    const m = new Matrix4();
+    m.fromArray(matrices, offset);
+    transforms[ti] = m;
+  }
+  return { transforms, identityByIndex: identityFlags };
+}
+function buildInstancesFromPrecomputed(bg, meshPositions, meshNormals, transformMatrices, transformIdentity) {
+  console.time("Building instances");
+  const { transforms, identityByIndex } = computeTransformsFromPacked(
+    transformMatrices,
+    transformIdentity
+  );
+  const geometries = computeMeshGeometriesFromPrecomputed(bg, meshPositions, meshNormals);
+  const materials = computeMaterials(bg);
+  const instanceCount = bg.InstanceMeshIndex.length;
+  const instances = new Array(instanceCount);
+  for (let i = 0; i < instanceCount; i++) {
+    const meshIndex = bg.InstanceMeshIndex[i];
+    if (meshIndex < 0)
+      continue;
+    const flag = bg.InstanceFlags[i];
+    if (flag & 1)
+      continue;
+    const geometry = geometries[meshIndex];
+    if (!geometry)
+      continue;
+    const material = materials[bg.InstanceMaterialIndex[i]];
+    const transformIndex = bg.InstanceTransformIndex[i];
+    const transform = transforms[transformIndex];
+    const entity = bg.InstanceEntityIndex[i];
+    instances[i] = {
+      instance: i,
+      geometry,
+      material,
+      materialId: bg.InstanceMaterialIndex[i],
+      transform,
+      entity,
+      isIdentity: identityByIndex[transformIndex] === 1
+    };
+  }
+  console.timeEnd("Building instances");
+  return instances;
+}
+function collectTaskTransfers(tasks) {
+  const transfers = [];
+  for (const task of tasks) {
+    for (const instance of task.instances) {
+      transfers.push(instance.transform.buffer);
+      transfers.push(instance.positions.buffer);
+      transfers.push(instance.indices.buffer);
+    }
+  }
+  return transfers;
+}
+class BuildGeometryMergeWorkerClient {
+  constructor() {
+    __publicField(this, "worker");
+    __publicField(this, "pending", /* @__PURE__ */ new Map());
+    __publicField(this, "nextRequestId", 1);
+    this.worker = new WorkerWrapper$1();
+    this.worker.onmessage = (event) => {
+      const message = event.data;
+      const pending = this.pending.get(message.id);
+      if (!pending)
+        return;
+      this.pending.delete(message.id);
+      if (message.type === "done") {
+        pending.resolve(message.results);
+        return;
+      }
+      pending.reject(new Error(message.message));
+    };
+    this.worker.onerror = (event) => {
+      for (const pending of this.pending.values()) {
+        pending.reject(new Error(event.message || "buildGeometry merge worker crashed"));
+      }
+      this.pending.clear();
+    };
+  }
+  merge(tasks) {
+    if (tasks.length === 0)
+      return Promise.resolve([]);
+    const id = this.nextRequestId++;
+    const transfers = collectTaskTransfers(tasks);
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.worker.postMessage({
+        id,
+        type: "merge",
+        tasks
+      }, transfers);
+    });
+  }
+  dispose() {
+    for (const pending of this.pending.values()) {
+      pending.reject(new Error("buildGeometry merge worker disposed"));
+    }
+    this.pending.clear();
+    this.worker.terminate();
+  }
+}
+let mergeWorkerClient = null;
+function getMergeWorkerClient() {
+  if (!mergeWorkerClient) {
+    mergeWorkerClient = new BuildGeometryMergeWorkerClient();
+  }
+  return mergeWorkerClient;
+}
 function buildGeometry(instances) {
-  console.time("Building geometry");
+  const startedAt = perfNow();
+  const groupingStartedAt = perfNow();
   const root = new Group();
   const instanceGroups = groupInstances(instances);
+  const groupingDurationMs = perfDuration(
+    "buildGeometry.groupInstances",
+    groupingStartedAt
+  );
+  const gatherStartedAt = perfNow();
   const materialGroups = gatherSingleInstancesByMaterial(instanceGroups);
+  const gatherDurationMs = perfDuration(
+    "buildGeometry.gatherSingleInstancesByMaterial",
+    gatherStartedAt
+  );
+  const instancedStartedAt = perfNow();
   const instancedMeshes = createInstancedMeshes(instanceGroups);
+  const instancedDurationMs = perfDuration(
+    "buildGeometry.createInstancedMeshes",
+    instancedStartedAt,
+    { instancedCount: instancedMeshes.length }
+  );
+  const mergedStartedAt = perfNow();
   const nonInstancedMeshes = createMergedAndSingleMeshes(materialGroups);
+  const mergedDurationMs = perfDuration(
+    "buildGeometry.createMergedAndSingleMeshes",
+    mergedStartedAt,
+    { nonInstancedCount: nonInstancedMeshes.length }
+  );
   let polyCount = 0;
   for (const im of instancedMeshes) {
     polyCount += im.geometry.index.count / 3 * im.count;
@@ -1960,7 +2347,74 @@ function buildGeometry(instances) {
     root.add(nim);
   }
   root.rotation.x = -Math.PI / 2;
-  console.timeEnd("Building geometry");
+  const durationMs = perfDuration("buildGeometry.total", startedAt, {
+    sourceInstanceCount: instances.length,
+    groupedMaterialCount: instanceGroups.size,
+    materialGroupCount: materialGroups.length,
+    instancedMeshCount: instancedMeshes.length,
+    nonInstancedMeshCount: nonInstancedMeshes.length,
+    polyCount,
+    groupingDurationMs,
+    gatherDurationMs,
+    instancedDurationMs,
+    mergedDurationMs
+  });
+  perfLongTask("buildGeometry.longTask", startedAt, 50, {
+    sourceInstanceCount: instances.length,
+    polyCount,
+    durationMs
+  });
+  return root;
+}
+async function buildGeometryAsync(instances) {
+  const startedAt = perfNow();
+  const groupingStartedAt = perfNow();
+  const root = new Group();
+  const instanceGroups = groupInstances(instances);
+  const groupingDurationMs = perfDuration("buildGeometry.groupInstances", groupingStartedAt);
+  const gatherStartedAt = perfNow();
+  const materialGroups = gatherSingleInstancesByMaterial(instanceGroups);
+  const gatherDurationMs = perfDuration(
+    "buildGeometry.gatherSingleInstancesByMaterial",
+    gatherStartedAt
+  );
+  const instancedStartedAt = perfNow();
+  const instancedMeshes = createInstancedMeshes(instanceGroups);
+  const instancedDurationMs = perfDuration("buildGeometry.createInstancedMeshes", instancedStartedAt, {
+    instancedCount: instancedMeshes.length
+  });
+  const mergedStartedAt = perfNow();
+  const nonInstancedMeshes = await createMergedAndSingleMeshesAsync(materialGroups);
+  const mergedDurationMs = perfDuration("buildGeometry.createMergedAndSingleMeshes", mergedStartedAt, {
+    nonInstancedCount: nonInstancedMeshes.length
+  });
+  let polyCount = 0;
+  for (const im of instancedMeshes) {
+    polyCount += im.geometry.index.count / 3 * im.count;
+    root.add(im);
+  }
+  for (const nim of nonInstancedMeshes) {
+    polyCount += nim.geometry.index.count / 3;
+    root.add(nim);
+  }
+  root.rotation.x = -Math.PI / 2;
+  const durationMs = perfDuration("buildGeometry.total", startedAt, {
+    sourceInstanceCount: instances.length,
+    groupedMaterialCount: instanceGroups.size,
+    materialGroupCount: materialGroups.length,
+    instancedMeshCount: instancedMeshes.length,
+    nonInstancedMeshCount: nonInstancedMeshes.length,
+    polyCount,
+    groupingDurationMs,
+    gatherDurationMs,
+    instancedDurationMs,
+    mergedDurationMs
+  });
+  perfLongTask("buildGeometry.longTask", startedAt, 50, {
+    sourceInstanceCount: instances.length,
+    polyCount,
+    durationMs
+  });
   return root;
 }
 function createMergedAndSingleMeshes(materialGroups) {
@@ -2003,6 +2457,79 @@ function createMergedAndSingleMeshes(materialGroups) {
     r.push(mergedMesh);
   }
   return r;
+}
+async function createMergedAndSingleMeshesAsync(materialGroups) {
+  const result = [];
+  const mergeTasks = [];
+  const mergeTaskMaterialById = /* @__PURE__ */ new Map();
+  let taskId = 0;
+  for (const materialGroup of materialGroups) {
+    const n = materialGroup.instances.length;
+    if (n === 0)
+      continue;
+    if (n === 1) {
+      const i = materialGroup.instances[0];
+      const mesh = new Mesh(i.geometry, i.material);
+      mesh.matrixAutoUpdate = false;
+      mesh.matrix.copy(i.transform);
+      mesh.userData.pick = {
+        kind: "single",
+        instanceIndex: i.instance
+      };
+      result.push(mesh);
+      continue;
+    }
+    const taskInstances = [];
+    for (const instance of materialGroup.instances) {
+      const posAttr = instance.geometry.getAttribute("position");
+      const indexAttr = instance.geometry.getIndex();
+      if (!posAttr || !indexAttr)
+        continue;
+      taskInstances.push({
+        instanceIndex: instance.instance,
+        isIdentity: instance.isIdentity,
+        transform: new Float32Array(instance.transform.elements),
+        positions: new Float32Array(posAttr.array.slice()),
+        indices: new Uint32Array(indexAttr.array.slice())
+      });
+    }
+    if (taskInstances.length < 2) {
+      for (const instance of materialGroup.instances) {
+        const mesh = new Mesh(instance.geometry, instance.material);
+        mesh.matrixAutoUpdate = false;
+        mesh.matrix.copy(instance.transform);
+        mesh.userData.pick = {
+          kind: "single",
+          instanceIndex: instance.instance
+        };
+        result.push(mesh);
+      }
+      continue;
+    }
+    mergeTaskMaterialById.set(taskId, materialGroup.material);
+    mergeTasks.push({
+      taskId,
+      instances: taskInstances
+    });
+    taskId++;
+  }
+  const mergedResults = await getMergeWorkerClient().merge(mergeTasks);
+  for (const merged of mergedResults) {
+    const material = mergeTaskMaterialById.get(merged.taskId);
+    if (!material)
+      continue;
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new BufferAttribute(merged.mergedPositions, 3));
+    geometry.setIndex(new BufferAttribute(merged.mergedIndices, 1));
+    const mesh = new Mesh(geometry, material);
+    mesh.name = `MergedStatic_Material_${material.Id ?? "unknown"}`;
+    mesh.userData.pick = {
+      kind: "merged",
+      triToInstanceIndex: merged.triToInstanceIndex
+    };
+    result.push(mesh);
+  }
+  return result;
 }
 function mergeGeometries(geometries) {
   let indexCount = 0;
@@ -2109,137 +2636,531 @@ function createInstancedMeshes(instanceGroups) {
   }
   return r;
 }
-function buildInstances(bg) {
-  console.time("Building instances");
-  const transforms = computeTransforms(bg);
-  const geometries = computeMeshGeometries(bg);
-  const materials = computeMaterials(bg);
-  const instanceCount = bg.InstanceMeshIndex.length;
-  const instances = new Array(instanceCount);
-  const identity = new Matrix4();
-  for (let i = 0; i < instanceCount; i++) {
-    const meshIndex = bg.InstanceMeshIndex[i];
-    if (meshIndex < 0)
+function splitBuckets(instances) {
+  const opaque = [];
+  const transparent = [];
+  for (const instance of instances) {
+    if (!instance)
       continue;
-    const flag = bg.InstanceFlags[i];
-    if (flag & 1)
+    const mat = instance.material;
+    if (mat.transparent || mat.opacity < 0.999) {
+      transparent.push(instance);
       continue;
-    const geometry = geometries[meshIndex];
-    if (!geometry)
-      continue;
-    const material = materials[bg.InstanceMaterialIndex[i]];
-    const transform = transforms[bg.InstanceTransformIndex[i]];
-    const entity = bg.InstanceEntityIndex[i];
-    const isIdentity = transform.equals(identity);
-    instances[i] = {
-      instance: i,
-      geometry,
-      material,
-      transform,
-      entity,
-      isIdentity
-    };
-  }
-  console.timeEnd("Building instances");
-  return instances;
-}
-function computeMeshGeometries(bim) {
-  const meshCount = bim.MeshVertexOffset.length;
-  const indexCount = bim.IndexBuffer.length;
-  const vertexCount = bim.VertexX.length;
-  const meshGeometries = new Array(meshCount);
-  const {
-    VertexX,
-    VertexY,
-    VertexZ,
-    IndexBuffer,
-    MeshVertexOffset,
-    MeshIndexOffset
-  } = bim;
-  for (let mi = 0; mi < meshCount; mi++) {
-    const iStart = MeshIndexOffset[mi];
-    const iEnd = mi + 1 < meshCount ? MeshIndexOffset[mi + 1] : indexCount;
-    const iCount = iEnd - iStart;
-    const vStart = MeshVertexOffset[mi];
-    const vEnd = mi + 1 < meshCount ? MeshVertexOffset[mi + 1] : vertexCount;
-    const vCount = vEnd - vStart;
-    if (iCount === 0 || vCount === 0)
-      continue;
-    const indexArray = IndexBuffer.subarray(iStart, iEnd);
-    const vertexMultiplier = 1e4;
-    const positionArray = new Float32Array(vCount * 3);
-    for (let vi = 0; vi < vCount; vi++) {
-      positionArray[vi * 3 + 0] = VertexX[vi + vStart] / vertexMultiplier;
-      positionArray[vi * 3 + 1] = VertexY[vi + vStart] / vertexMultiplier;
-      positionArray[vi * 3 + 2] = VertexZ[vi + vStart] / vertexMultiplier;
     }
-    const geom = new BufferGeometry();
-    geom.setAttribute("position", new BufferAttribute(positionArray, 3));
-    geom.setIndex(new BufferAttribute(indexArray, 1));
-    meshGeometries[mi] = geom;
+    opaque.push(instance);
   }
-  return meshGeometries;
+  return { opaque, transparent };
 }
-function computeMaterials(bim) {
-  const numMaterials = bim.MaterialAlpha.length;
-  const materials = new Array(numMaterials);
-  for (let mi = 0; mi < numMaterials; mi++) {
-    const r = bim.MaterialRed[mi] / 255;
-    const g = bim.MaterialGreen[mi] / 255;
-    const b = bim.MaterialBlue[mi] / 255;
-    const a = bim.MaterialAlpha[mi] / 255;
-    const roughness = bim.MaterialRoughness[mi] / 255;
-    const metalness = bim.MaterialMetallic[mi] / 255;
-    const mat = new MeshStandardMaterial({
-      color: new Color(r, g, b),
-      opacity: a,
-      flatShading: true,
-      transparent: a < 0.999,
-      roughness,
-      metalness,
-      side: DoubleSide
+function groupKey(instance) {
+  return `${instance.materialId}:${instance.geometry.uuid}`;
+}
+function mergeInstances(instances) {
+  let indexCount = 0;
+  let vertexCount = 0;
+  for (const instance of instances) {
+    const posAttr = instance.geometry.getAttribute("position");
+    const normalAttr = instance.geometry.getAttribute("normal");
+    const idxAttr = instance.geometry.getIndex();
+    if (!posAttr || !normalAttr || !idxAttr)
+      continue;
+    vertexCount += posAttr.count;
+    indexCount += idxAttr.count;
+  }
+  if (vertexCount === 0 || indexCount === 0)
+    return null;
+  const mergedPositions = new Float32Array(vertexCount * 3);
+  const mergedNormals = new Float32Array(vertexCount * 3);
+  const mergedIndices = new Uint32Array(indexCount);
+  const instanceIds = new Float32Array(vertexCount);
+  const materialIds = new Float32Array(vertexCount);
+  const normalMatrix = new Matrix3();
+  let vertexOffset = 0;
+  let indexOffset = 0;
+  for (const instance of instances) {
+    const posAttr = instance.geometry.getAttribute("position");
+    const normalAttr = instance.geometry.getAttribute("normal");
+    const idxAttr = instance.geometry.getIndex();
+    if (!posAttr || !normalAttr || !idxAttr)
+      continue;
+    const srcPos = posAttr.array;
+    const srcNormal = normalAttr.array;
+    const srcIndex = idxAttr.array;
+    const count = posAttr.count;
+    const srcLen = count * 3;
+    const dstBase = vertexOffset * 3;
+    for (let i = 0; i < count; i++) {
+      instanceIds[vertexOffset + i] = instance.instance;
+      materialIds[vertexOffset + i] = instance.materialId;
+    }
+    if (instance.isIdentity) {
+      mergedPositions.set(srcPos.subarray(0, srcLen), dstBase);
+      mergedNormals.set(srcNormal.subarray(0, srcLen), dstBase);
+    } else {
+      const m = instance.transform.elements;
+      const m00 = m[0], m01 = m[4], m02 = m[8], m03 = m[12];
+      const m10 = m[1], m11 = m[5], m12 = m[9], m13 = m[13];
+      const m20 = m[2], m21 = m[6], m22 = m[10], m23 = m[14];
+      normalMatrix.getNormalMatrix(instance.transform);
+      const nm = normalMatrix.elements;
+      const n00 = nm[0], n01 = nm[3], n02 = nm[6];
+      const n10 = nm[1], n11 = nm[4], n12 = nm[7];
+      const n20 = nm[2], n21 = nm[5], n22 = nm[8];
+      for (let i = 0; i < count; i++) {
+        const srcBase = i * 3;
+        const outBase = dstBase + srcBase;
+        const x = srcPos[srcBase];
+        const y = srcPos[srcBase + 1];
+        const z = srcPos[srcBase + 2];
+        mergedPositions[outBase] = m00 * x + m01 * y + m02 * z + m03;
+        mergedPositions[outBase + 1] = m10 * x + m11 * y + m12 * z + m13;
+        mergedPositions[outBase + 2] = m20 * x + m21 * y + m22 * z + m23;
+        const nx = srcNormal[srcBase];
+        const ny = srcNormal[srcBase + 1];
+        const nz = srcNormal[srcBase + 2];
+        mergedNormals[outBase] = n00 * nx + n01 * ny + n02 * nz;
+        mergedNormals[outBase + 1] = n10 * nx + n11 * ny + n12 * nz;
+        mergedNormals[outBase + 2] = n20 * nx + n21 * ny + n22 * nz;
+      }
+    }
+    for (let i = 0; i < idxAttr.count; i++) {
+      mergedIndices[indexOffset + i] = srcIndex[i] + vertexOffset;
+    }
+    vertexOffset += count;
+    indexOffset += idxAttr.count;
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new BufferAttribute(mergedPositions, 3));
+  geometry.setAttribute("normal", new BufferAttribute(mergedNormals, 3));
+  geometry.setAttribute("instanceId", new Float32BufferAttribute(instanceIds, 1));
+  geometry.setAttribute("materialId", new Float32BufferAttribute(materialIds, 1));
+  geometry.setIndex(new BufferAttribute(mergedIndices, 1));
+  const mesh = new Mesh(geometry, new MeshBasicMaterial());
+  mesh.frustumCulled = false;
+  mesh.matrixAutoUpdate = false;
+  mesh.userData.pick = { kind: "viewStateMerged" };
+  return mesh;
+}
+function buildHybridBucket(instances) {
+  const grouped = /* @__PURE__ */ new Map();
+  for (const instance of instances) {
+    const key = groupKey(instance);
+    const group = grouped.get(key);
+    if (group) {
+      group.push(instance);
+    } else {
+      grouped.set(key, [instance]);
+    }
+  }
+  const instancedMeshes = [];
+  const singleByMaterial = /* @__PURE__ */ new Map();
+  for (const groupedInstances of grouped.values()) {
+    if (groupedInstances.length === 0)
+      continue;
+    const first = groupedInstances[0];
+    const count = groupedInstances.length;
+    if (count <= 1) {
+      const list = singleByMaterial.get(first.materialId);
+      if (list) {
+        list.push(first);
+      } else {
+        singleByMaterial.set(first.materialId, [first]);
+      }
+      continue;
+    }
+    const geometry = first.geometry.clone();
+    const instanced = new InstancedMesh(geometry, new MeshBasicMaterial(), count);
+    instanced.instanceMatrix.setUsage(StaticDrawUsage);
+    const instanceIds = new Float32Array(count);
+    const materialIds = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      const item = groupedInstances[i];
+      instanced.setMatrixAt(i, item.transform);
+      instanceIds[i] = item.instance;
+      materialIds[i] = item.materialId;
+    }
+    instanced.instanceMatrix.needsUpdate = true;
+    instanced.geometry.setAttribute("instanceId", new InstancedBufferAttribute(instanceIds, 1));
+    instanced.geometry.setAttribute("materialId", new InstancedBufferAttribute(materialIds, 1));
+    instanced.frustumCulled = false;
+    instanced.matrixAutoUpdate = false;
+    instanced.userData.pick = {
+      kind: "instanced",
+      instanceIndices: Array.from(instanceIds)
+    };
+    instancedMeshes.push(instanced);
+  }
+  const mergedSingleMeshes = [];
+  for (const groupedSingles of singleByMaterial.values()) {
+    const merged = mergeInstances(groupedSingles);
+    if (merged)
+      mergedSingleMeshes.push(merged);
+  }
+  return { meshes: [...instancedMeshes, ...mergedSingleMeshes] };
+}
+function buildViewStateBuckets(instances) {
+  const startedAt = perfNow();
+  const split = splitBuckets(instances);
+  const opaque = buildHybridBucket(split.opaque);
+  const transparent = buildHybridBucket(split.transparent);
+  perfDuration("viewState.buildBuckets", startedAt, {
+    sourceCount: instances.length,
+    opaqueCount: split.opaque.length,
+    transparentCount: split.transparent.length
+  });
+  return { opaque, transparent };
+}
+function setViewStateMaterialSelectionColor(material, color) {
+  if (!material)
+    return;
+  const uniforms = material.userData.viewStateSelectionUniforms;
+  if (!uniforms)
+    return;
+  uniforms.color.set(color);
+}
+function createViewStateMaterial(options) {
+  const selectionUniforms = {
+    color: new Color(16776960),
+    mix: 1
+  };
+  const material = new MeshStandardMaterial({
+    color: 16777215,
+    roughness: 0.7,
+    metalness: 0.1,
+    transparent: options.transparentPass,
+    depthWrite: !options.transparentPass,
+    side: DoubleSide
+  });
+  material.userData.viewStateSelectionUniforms = selectionUniforms;
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uBaseMaterialTex = {
+      value: options.textures.baseMaterial
+    };
+    shader.uniforms.uViewFlagsTex = { value: options.textures.flags };
+    shader.uniforms.uColorOverridesTex = {
+      value: options.textures.colorOverrides
+    };
+    shader.uniforms.uSelectionColor = { value: selectionUniforms.color };
+    shader.uniforms.uSelectionMix = { value: selectionUniforms.mix };
+    shader.uniforms.uInstanceCount = {
+      value: Math.max(1, options.instanceCount)
+    };
+    shader.uniforms.uMaterialCount = {
+      value: Math.max(1, options.materialCount)
+    };
+    shader.uniforms.uViewFlagsTexWidth = {
+      value: Math.max(1, options.textures.flags.image.width)
+    };
+    shader.uniforms.uViewFlagsTexHeight = {
+      value: Math.max(1, options.textures.flags.image.height)
+    };
+    shader.uniforms.uColorOverridesTexWidth = {
+      value: Math.max(1, options.textures.colorOverrides.image.width)
+    };
+    shader.uniforms.uColorOverridesTexHeight = {
+      value: Math.max(1, options.textures.colorOverrides.image.height)
+    };
+    shader.uniforms.uBaseMaterialTexWidth = {
+      value: Math.max(1, options.textures.baseMaterial.image.width)
+    };
+    shader.uniforms.uBaseMaterialTexHeight = {
+      value: Math.max(1, options.textures.baseMaterial.image.height)
+    };
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <common>",
+      `#include <common>
+attribute float instanceId;
+attribute float materialId;
+varying float vInstanceId;
+varying float vMaterialId;`
+    ).replace(
+      "#include <begin_vertex>",
+      `#include <begin_vertex>
+vInstanceId = instanceId;
+vMaterialId = materialId;`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <common>",
+      `#include <common>
+uniform sampler2D uBaseMaterialTex;
+uniform sampler2D uViewFlagsTex;
+uniform sampler2D uColorOverridesTex;
+uniform vec3 uSelectionColor;
+uniform float uSelectionMix;
+uniform float uInstanceCount;
+uniform float uMaterialCount;
+uniform float uViewFlagsTexWidth;
+uniform float uViewFlagsTexHeight;
+uniform float uColorOverridesTexWidth;
+uniform float uColorOverridesTexHeight;
+uniform float uBaseMaterialTexWidth;
+uniform float uBaseMaterialTexHeight;
+varying float vInstanceId;
+varying float vMaterialId;
+
+vec4 sampleLookupPacked(sampler2D t, float id, float width, float height) {
+    float ix = mod(id, width);
+    float iy = floor(id / width);
+    vec2 uv = vec2((ix + 0.5) / width, (iy + 0.5) / height);
+    return texture2D(t, uv);
+}`
+    ).replace(
+      "vec4 diffuseColor = vec4( diffuse, opacity );",
+      `vec4 baseMaterial = sampleLookupPacked(
+    uBaseMaterialTex,
+    vMaterialId,
+    uBaseMaterialTexWidth,
+    uBaseMaterialTexHeight
+);
+vec4 stateFlags = sampleLookupPacked(
+    uViewFlagsTex,
+    vInstanceId,
+    uViewFlagsTexWidth,
+    uViewFlagsTexHeight
+);
+vec4 colorOverride = sampleLookupPacked(
+    uColorOverridesTex,
+    vInstanceId,
+    uColorOverridesTexWidth,
+    uColorOverridesTexHeight
+);
+
+float rawFlags = floor(stateFlags.r * 255.0 + 0.5);
+bool isVisible = mod(rawFlags, 2.0) >= 1.0;
+bool isSelected = mod(floor(rawFlags / 2.0), 2.0) >= 1.0;
+bool isGhosted = mod(floor(rawFlags / 4.0), 2.0) >= 1.0;
+
+vec3 finalBaseColor = baseMaterial.rgb;
+float finalOpacity = baseMaterial.a;
+
+if (colorOverride.a > 0.5) {
+    finalBaseColor = colorOverride.rgb;
+}
+
+if (isGhosted) {
+    finalOpacity = min(finalOpacity, 0.2);
+}
+
+if (isSelected) {
+    float fillMix = clamp(uSelectionMix, 0.0, 1.0);
+    finalBaseColor = mix(finalBaseColor, uSelectionColor, fillMix);
+}
+
+if (!isVisible) {
+    discard;
+}
+
+vec4 diffuseColor = vec4(finalBaseColor, finalOpacity);`
+    );
+  };
+  material.customProgramCacheKey = () => `view-state-${options.transparentPass ? "transparent" : "opaque"}-v3`;
+  return material;
+}
+var ViewStateFlag = /* @__PURE__ */ ((ViewStateFlag2) => {
+  ViewStateFlag2[ViewStateFlag2["Visible"] = 1] = "Visible";
+  ViewStateFlag2[ViewStateFlag2["Selected"] = 2] = "Selected";
+  ViewStateFlag2[ViewStateFlag2["Ghosted"] = 4] = "Ghosted";
+  return ViewStateFlag2;
+})(ViewStateFlag || {});
+function buildPackedTextureData(entryCount) {
+  const safeEntryCount = Math.max(1, entryCount);
+  const maxWidth = 2048;
+  const width = Math.min(maxWidth, safeEntryCount);
+  const height = Math.ceil(safeEntryCount / width);
+  return {
+    width,
+    height,
+    data: new Uint8Array(width * height * 4)
+  };
+}
+function setupNearest(texture) {
+  texture.magFilter = NearestFilter;
+  texture.minFilter = NearestFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
+}
+function buildViewStateTextures(options) {
+  const packedFlags = buildPackedTextureData(options.instanceCount);
+  const packedOverrides = buildPackedTextureData(options.instanceCount);
+  const packedBaseMaterials = buildPackedTextureData(options.materialCount);
+  const flagsData = packedFlags.data;
+  for (let i = 0; i < options.instanceCount; i++) {
+    flagsData[i * 4] = ViewStateFlag.Visible;
+  }
+  const colorOverridesData = packedOverrides.data;
+  packedBaseMaterials.data.set(options.baseMaterialColors.subarray(0, options.materialCount * 4), 0);
+  const flags = setupNearest(
+    new DataTexture(
+      flagsData,
+      packedFlags.width,
+      packedFlags.height,
+      RGBAFormat,
+      UnsignedByteType
+    )
+  );
+  const colorOverrides = setupNearest(
+    new DataTexture(
+      colorOverridesData,
+      packedOverrides.width,
+      packedOverrides.height,
+      RGBAFormat,
+      UnsignedByteType
+    )
+  );
+  const baseMaterial = setupNearest(
+    new DataTexture(
+      packedBaseMaterials.data,
+      packedBaseMaterials.width,
+      packedBaseMaterials.height,
+      RGBAFormat,
+      UnsignedByteType
+    )
+  );
+  return {
+    baseMaterial,
+    flags,
+    colorOverrides
+  };
+}
+class ViewStateTable {
+  constructor(textures, instanceCount) {
+    __publicField(this, "flagsData");
+    __publicField(this, "colorOverridesData");
+    __publicField(this, "instanceCount");
+    __publicField(this, "textures");
+    this.textures = textures;
+    this.instanceCount = instanceCount;
+    this.flagsData = textures.flags.image.data;
+    this.colorOverridesData = textures.colorOverrides.image.data;
+  }
+  setVisibility(instanceIds, visible) {
+    this.applyFlag(instanceIds, ViewStateFlag.Visible, visible);
+  }
+  setSelected(instanceIds, selected) {
+    this.applyFlag(instanceIds, ViewStateFlag.Selected, selected);
+  }
+  setGhosted(instanceIds, ghosted) {
+    this.applyFlag(instanceIds, ViewStateFlag.Ghosted, ghosted);
+  }
+  setColorOverride(instanceIds, color) {
+    const startedAt = perfNow();
+    for (const instanceId of instanceIds) {
+      if (instanceId < 0 || instanceId >= this.instanceCount)
+        continue;
+      const base = instanceId * 4;
+      if (!color) {
+        this.colorOverridesData[base + 0] = 0;
+        this.colorOverridesData[base + 1] = 0;
+        this.colorOverridesData[base + 2] = 0;
+        this.colorOverridesData[base + 3] = 0;
+        continue;
+      }
+      this.colorOverridesData[base + 0] = Math.round(color.r * 255);
+      this.colorOverridesData[base + 1] = Math.round(color.g * 255);
+      this.colorOverridesData[base + 2] = Math.round(color.b * 255);
+      this.colorOverridesData[base + 3] = 255;
+    }
+    this.textures.colorOverrides.needsUpdate = true;
+    perfDuration("viewState.colorOverride", startedAt, {
+      count: instanceIds.length
     });
-    materials[mi] = mat;
   }
-  return materials;
+  clearColorOverrides(instanceIds) {
+    this.setColorOverride(instanceIds, null);
+  }
+  applyPendingGpuUpdates() {
+    this.textures.flags.needsUpdate = true;
+    this.textures.colorOverrides.needsUpdate = true;
+  }
+  applyFlag(instanceIds, flag, enabled) {
+    const startedAt = perfNow();
+    for (const instanceId of instanceIds) {
+      if (instanceId < 0 || instanceId >= this.instanceCount)
+        continue;
+      const offset = instanceId * 4;
+      const current = this.flagsData[offset];
+      this.flagsData[offset] = enabled ? current | flag : current & ~flag;
+    }
+    this.textures.flags.needsUpdate = true;
+    perfDuration("viewState.flagPatch", startedAt, {
+      count: instanceIds.length,
+      flag,
+      enabled
+    });
+  }
 }
-function computeTransforms(bim) {
-  const {
-    TransformTX,
-    TransformTY,
-    TransformTZ,
-    TransformQX,
-    TransformQY,
-    TransformQZ,
-    TransformQW,
-    TransformSX,
-    TransformSY,
-    TransformSZ
-  } = bim;
-  const tmpPos = new Vector3();
-  const tmpQuat = new Quaternion();
-  const tmpScale = new Vector3();
-  const transformCount = TransformTX.length;
-  const matrices = new Array(transformCount);
-  for (let ti = 0; ti < transformCount; ti++) {
-    const tx = TransformTX[ti];
-    const ty = TransformTY[ti];
-    const tz = TransformTZ[ti];
-    const sx = TransformSX[ti];
-    const sy = TransformSY[ti];
-    const sz = TransformSZ[ti];
-    const qx = TransformQX[ti];
-    const qy = TransformQY[ti];
-    const qz = TransformQZ[ti];
-    const qw = TransformQW[ti];
-    const m = new Matrix4();
-    tmpPos.set(tx, ty, tz);
-    tmpQuat.set(qx, qy, qz, qw);
-    tmpScale.set(sx, sy, sz);
-    m.compose(tmpPos, tmpQuat, tmpScale);
-    matrices[ti] = m;
+function buildBaseMaterialLookup(instances) {
+  let maxMaterialId = -1;
+  for (const instance of instances) {
+    if (!instance)
+      continue;
+    maxMaterialId = Math.max(maxMaterialId, instance.materialId);
   }
-  return matrices;
+  const materialCount = Math.max(1, maxMaterialId + 1);
+  const data = new Uint8Array(materialCount * 4);
+  for (const instance of instances) {
+    if (!instance)
+      continue;
+    const mat = instance.material;
+    const offset = instance.materialId * 4;
+    data[offset] = Math.round(mat.color.r * 255);
+    data[offset + 1] = Math.round(mat.color.g * 255);
+    data[offset + 2] = Math.round(mat.color.b * 255);
+    data[offset + 3] = Math.round((mat.opacity ?? 1) * 255);
+  }
+  return { data, materialCount };
+}
+function buildViewStateRuntime(instances) {
+  const startedAt = perfNow();
+  const { opaque, transparent } = buildViewStateBuckets(instances);
+  const { data: baseMaterialLookup, materialCount } = buildBaseMaterialLookup(instances);
+  const instanceCount = instances.length;
+  const textures = buildViewStateTextures({
+    instanceCount,
+    materialCount,
+    baseMaterialColors: baseMaterialLookup
+  });
+  const materialOpaque = createViewStateMaterial({
+    textures,
+    instanceCount,
+    materialCount,
+    transparentPass: false
+  });
+  const materialTransparent = createViewStateMaterial({
+    textures,
+    instanceCount,
+    materialCount,
+    transparentPass: true
+  });
+  const group = new Group();
+  group.name = "ViewStateRoot";
+  group.rotation.x = -Math.PI / 2;
+  for (let i = 0; i < opaque.meshes.length; i++) {
+    const meshOpaque = opaque.meshes[i];
+    meshOpaque.material = materialOpaque;
+    meshOpaque.name = `ViewStateOpaqueBucket_${i}`;
+    group.add(meshOpaque);
+  }
+  for (let i = 0; i < transparent.meshes.length; i++) {
+    const meshTransparent = transparent.meshes[i];
+    meshTransparent.material = materialTransparent;
+    meshTransparent.name = `ViewStateTransparentBucket_${i}`;
+    meshTransparent.renderOrder = 10;
+    group.add(meshTransparent);
+  }
+  const state = new ViewStateTable(textures, instanceCount);
+  const model = {
+    group,
+    textures,
+    materialOpaque,
+    materialTransparent
+  };
+  perfDuration("viewState.buildRuntime", startedAt, {
+    instanceCount,
+    materialCount,
+    bucketCount: group.children.length
+  });
+  return { model, state };
 }
 class BimData {
   constructor() {
@@ -2250,6 +3171,7 @@ class BimData {
     __publicField(this, "Resolver");
     __publicField(this, "Query");
     __publicField(this, "Instances");
+    __publicField(this, "ViewState", null);
     __publicField(this, "Descriptors");
     __publicField(this, "IntegerParameters");
     __publicField(this, "StringParameters");
@@ -2257,8 +3179,35 @@ class BimData {
     __publicField(this, "SingleParameters");
     __publicField(this, "PointParameters");
   }
+  buildViewStateGeometry(instances) {
+    const startedAt = perfNow();
+    this.ViewState = buildViewStateRuntime(instances);
+    perfDuration("bimData.buildViewStateGeometry", startedAt, {
+      sourceInstanceCount: instances.length
+    });
+    return this.ViewState.model.group;
+  }
   rebuildGeometry(instances) {
-    return buildGeometry(instances);
+    const startedAt = perfNow();
+    const geometry = buildGeometry(instances);
+    perfDuration("bimData.rebuildGeometry", startedAt, {
+      sourceInstanceCount: instances.length
+    });
+    perfLongTask("bimData.rebuildGeometry.longTask", startedAt, 50, {
+      sourceInstanceCount: instances.length
+    });
+    return geometry;
+  }
+  async rebuildGeometryAsync(instances) {
+    const startedAt = perfNow();
+    const geometry = await buildGeometryAsync(instances);
+    perfDuration("bimData.rebuildGeometry", startedAt, {
+      sourceInstanceCount: instances.length
+    });
+    perfLongTask("bimData.rebuildGeometry.longTask", startedAt, 50, {
+      sourceInstanceCount: instances.length
+    });
+    return geometry;
   }
 }
 class BimResolver {
@@ -2452,103 +3401,411 @@ class BimQuery {
     );
   }
 }
-class BimOpenSchemaLoader {
-  async load(source, options) {
-    const response = await fetch(source);
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch BOS from ${source}: ${response.status} ${response.statusText}`
-      );
+const REQUIRED_GEOMETRY_TABLES = [
+  "Instances",
+  "VertexBuffer",
+  "IndexBuffer",
+  "Meshes",
+  "Materials",
+  "Transforms"
+];
+const VERTEX_TABLES = ["VertexBuffer"];
+const INDEX_TABLES = ["IndexBuffer"];
+const OTHER_TABLES_BASE = [
+  "Instances",
+  "Meshes",
+  "Materials",
+  "Transforms",
+  "Entities",
+  "Strings"
+];
+const PARAMETER_TABLES = [
+  "Descriptors",
+  "IntegerParameters",
+  "SingleParameters",
+  "StringParameters",
+  "EntityParameters",
+  "PointParameters"
+];
+class BimOpenSchemaWorkerClient {
+  constructor(workerTag) {
+    __publicField(this, "worker");
+    __publicField(this, "workerTag");
+    __publicField(this, "pending", /* @__PURE__ */ new Map());
+    __publicField(this, "nextRequestId", 1);
+    this.workerTag = workerTag;
+    this.worker = new WorkerWrapper$2();
+    this.worker.onmessage = (event) => {
+      const message = event.data;
+      const pendingRequest = this.pending.get(message.id);
+      if (!pendingRequest)
+        return;
+      if (message.type === "progress") {
+        console.debug(`[BOS worker] ${message.label}: ${message.durationMs} ms`);
+        return;
+      }
+      if (message.type === "done") {
+        this.pending.delete(message.id);
+        pendingRequest.resolve(message.payload);
+        return;
+      }
+      this.pending.delete(message.id);
+      pendingRequest.reject(new Error(message.message));
+    };
+    this.worker.onerror = (event) => {
+      for (const request of this.pending.values()) {
+        request.reject(new Error(event.message || "BOS worker crashed"));
+      }
+      this.pending.clear();
+    };
+  }
+  decode(files) {
+    const id = this.nextRequestId++;
+    const message = {
+      id,
+      type: "decode",
+      workerTag: this.workerTag,
+      files
+    };
+    const transfers = Object.values(files);
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.worker.postMessage(message, transfers);
+    });
+  }
+  dispose() {
+    for (const request of this.pending.values()) {
+      request.reject(new Error("BOS worker disposed"));
     }
-    const arrayBuffer = await response.arrayBuffer();
-    const zip = await JSZip.loadAsync(arrayBuffer);
-    const bimData = await loadBimGeometryFromZip(zip, options);
-    bimData.Instances = buildInstances(bimData.BimGeometry);
-    bimData.Query = new BimQuery(bimData);
-    bimData.Resolver = bimData.Query.Resolver;
-    bimData.ThreeGeometry = buildGeometry(bimData.Instances);
-    return bimData;
+    this.pending.clear();
+    this.worker.terminate();
   }
 }
-async function loadBimGeometryFromZip(zip, options) {
-  function findFileEndingWith(suffix) {
-    const lowerSuffix = suffix.toLowerCase();
-    const name = Object.keys(zip.files).find(
-      (n) => n.toLowerCase().endsWith(lowerSuffix)
-    );
-    if (!name)
-      throw new Error(`Could not find "${suffix}" in zip archive.`);
-    return name;
+class BimOpenSchemaZipWorkerClient {
+  constructor() {
+    __publicField(this, "worker");
+    __publicField(this, "pending", /* @__PURE__ */ new Map());
+    __publicField(this, "nextRequestId", 1);
+    this.worker = new WorkerWrapper$3();
+    this.worker.onmessage = (event) => {
+      const message = event.data;
+      const pendingRequest = this.pending.get(message.id);
+      if (!pendingRequest)
+        return;
+      if (message.type === "progress") {
+        console.debug(`[BOS worker] ${message.label}: ${message.durationMs} ms`);
+        return;
+      }
+      if (message.type === "done") {
+        this.pending.delete(message.id);
+        pendingRequest.resolve(message.payload);
+        return;
+      }
+      this.pending.delete(message.id);
+      pendingRequest.reject(new Error(message.message));
+    };
+    this.worker.onerror = (event) => {
+      for (const request of this.pending.values()) {
+        request.reject(new Error(event.message || "BOS zip worker crashed"));
+      }
+      this.pending.clear();
+    };
   }
-  async function readParquetTable(name, r, ctor = void 0, optional = false) {
-    let entryName;
-    try {
-      entryName = findFileEndingWith(name + ".parquet");
-    } catch (error) {
-      if (optional)
-        return;
-      throw error;
-    }
-    if (!entryName) {
-      if (optional)
-        return;
-      throw new Error(`Could not find "${name}.parquet" in zip archive.`);
-    }
-    const zipTimer = "Getting zip table " + entryName;
-    console.time(zipTimer);
-    const file = await zip.files[entryName].async("arraybuffer");
-    console.timeEnd(zipTimer);
-    const parquetTimer = "Getting parquet data " + entryName;
-    console.time(parquetTimer);
-    const metadata = await parquetMetadataAsync(file);
-    if (Number(metadata.num_rows) === 0) {
-      for (const schemaElement of metadata.schema) {
-        if (schemaElement.name && schemaElement.type !== void 0) {
-          r[schemaElement.name] = ctor ? new ctor(0) : [];
-        }
-      }
-      return;
-    }
-    await parquetRead({
-      file,
-      compressors,
-      metadata,
-      onChunk(chunk) {
-        let data = chunk.columnData;
-        const firstValue = data?.length ? data[0] : void 0;
-        const isBigIntArray = typeof firstValue === "bigint";
-        if (ctor && data.constructor.name != ctor.name && !isBigIntArray) {
-          data = new ctor(data);
-        }
-        r[chunk.columnName] = data;
-      }
+  extract(source, tables) {
+    const id = this.nextRequestId++;
+    const message = {
+      id,
+      type: "zip-load",
+      source,
+      tables
+    };
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.worker.postMessage(message);
     });
-    console.timeEnd(parquetTimer);
   }
-  console.time("Reading parquet tables");
+  dispose() {
+    for (const request of this.pending.values()) {
+      request.reject(new Error("BOS zip worker disposed"));
+    }
+    this.pending.clear();
+    this.worker.terminate();
+  }
+}
+let workerClients = null;
+let workerClientsOverride = null;
+let zipWorkerClient = null;
+let zipWorkerClientOverride = null;
+function getWorkerClients() {
+  if (workerClientsOverride) {
+    return workerClientsOverride;
+  }
+  if (!workerClients) {
+    workerClients = {
+      vertex: new BimOpenSchemaWorkerClient("vertex"),
+      index: new BimOpenSchemaWorkerClient("index"),
+      others: new BimOpenSchemaWorkerClient("others")
+    };
+  }
+  return workerClients;
+}
+function getZipWorkerClient() {
+  if (zipWorkerClientOverride) {
+    return zipWorkerClientOverride;
+  }
+  if (!zipWorkerClient) {
+    zipWorkerClient = new BimOpenSchemaZipWorkerClient();
+  }
+  return zipWorkerClient;
+}
+function materializeBimData(payload) {
+  const bimData = new BimData();
+  const geometry = {};
+  for (const tableName of REQUIRED_GEOMETRY_TABLES) {
+    const table = payload[tableName];
+    if (!table) {
+      throw new Error(`Missing required table "${tableName}" from worker payload.`);
+    }
+    Object.assign(geometry, table);
+  }
+  bimData.BimGeometry = geometry;
+  if (payload.Entities) {
+    bimData.Entities = payload.Entities;
+  }
+  const stringsValue = payload.Strings?.Strings;
+  if (Array.isArray(stringsValue)) {
+    bimData.Strings = stringsValue;
+  }
+  if (payload.Descriptors) {
+    bimData.Descriptors = payload.Descriptors;
+  }
+  if (payload.IntegerParameters) {
+    bimData.IntegerParameters = payload.IntegerParameters;
+  }
+  if (payload.SingleParameters) {
+    bimData.SingleParameters = payload.SingleParameters;
+  }
+  if (payload.StringParameters) {
+    bimData.StringParameters = payload.StringParameters;
+  }
+  if (payload.EntityParameters) {
+    bimData.EntityParameters = payload.EntityParameters;
+  }
+  if (payload.PointParameters) {
+    bimData.PointParameters = payload.PointParameters;
+  }
+  return bimData;
+}
+function buildOtherTables(options) {
+  const tables = [...OTHER_TABLES_BASE];
+  if (options?.loadParameters) {
+    tables.push(...PARAMETER_TABLES);
+  }
+  return tables;
+}
+function mergePayloads(payloads) {
+  return payloads.reduce((acc, payload) => {
+    Object.assign(acc, payload);
+    return acc;
+  }, {});
+}
+function pickFiles(files, tables) {
+  const selected = {};
+  for (const tableName of tables) {
+    const buffer = files[tableName];
+    if (!buffer) {
+      throw new Error(`Missing extracted parquet buffer for "${tableName}".`);
+    }
+    selected[tableName] = buffer;
+  }
+  return selected;
+}
+function buildAllRequestedTables(options) {
+  return [...VERTEX_TABLES, ...INDEX_TABLES, ...buildOtherTables(options)];
+}
+function findFileEndingWith(zip, suffix) {
+  const lowerSuffix = suffix.toLowerCase();
+  const name = Object.keys(zip.files).find(
+    (entryName) => entryName.toLowerCase().endsWith(lowerSuffix)
+  );
+  if (!name) {
+    throw new Error(`Could not find "${suffix}" in zip archive.`);
+  }
+  return name;
+}
+async function readParquetTableFromZip(zip, tableName, target, ctor, optional = false) {
+  let entryName;
+  try {
+    entryName = findFileEndingWith(zip, tableName + ".parquet");
+  } catch (error) {
+    if (optional)
+      return;
+    throw error;
+  }
+  if (!entryName) {
+    if (optional)
+      return;
+    throw new Error(`Could not find "${tableName}.parquet" in zip archive.`);
+  }
+  const zipTimer = `Getting zip table ${entryName}`;
+  console.time(zipTimer);
+  const file = await zip.files[entryName].async("arraybuffer");
+  console.timeEnd(zipTimer);
+  const parquetTimer = `Getting parquet data ${entryName}`;
+  console.time(parquetTimer);
+  const metadata = await parquetMetadataAsync(file);
+  if (Number(metadata.num_rows) === 0) {
+    for (const schemaElement of metadata.schema) {
+      if (schemaElement.name && schemaElement.type !== void 0) {
+        target[schemaElement.name] = ctor ? new ctor(0) : [];
+      }
+    }
+    console.timeEnd(parquetTimer);
+    return;
+  }
+  await parquetRead({
+    file,
+    compressors,
+    metadata,
+    onChunk(chunk) {
+      let data = chunk.columnData;
+      const firstValue = data?.length ? data[0] : void 0;
+      const isBigIntArray = typeof firstValue === "bigint";
+      if (ctor && data && data.constructor.name !== ctor.name && !isBigIntArray) {
+        data = new ctor(data);
+      }
+      target[chunk.columnName] = data;
+    }
+  });
+  console.timeEnd(parquetTimer);
+}
+async function loadBimDataFromZipMainThread(zip, options) {
   const bd = new BimData();
   const bg = {};
-  await readParquetTable("Instances", bg, Int32Array);
-  await readParquetTable("VertexBuffer", bg, Int32Array);
-  await readParquetTable("IndexBuffer", bg, Uint32Array);
-  await readParquetTable("Meshes", bg, Int32Array);
-  await readParquetTable("Materials", bg, Uint8Array);
-  await readParquetTable("Transforms", bg, Float32Array);
+  await readParquetTableFromZip(zip, "Instances", bg, Int32Array);
+  await readParquetTableFromZip(zip, "VertexBuffer", bg, Int32Array);
+  await readParquetTableFromZip(zip, "IndexBuffer", bg, Uint32Array);
+  await readParquetTableFromZip(zip, "Meshes", bg, Int32Array);
+  await readParquetTableFromZip(zip, "Materials", bg, Uint8Array);
+  await readParquetTableFromZip(zip, "Transforms", bg, Float32Array);
   bd.BimGeometry = bg;
-  await readParquetTable("Entities", bd.Entities = {}, Int32Array, true);
-  await readParquetTable("Strings", bd, null, true);
-  if (options && options.loadParameters) {
-    await readParquetTable("Descriptors", bd.Descriptors = {}, Int32Array);
-    await readParquetTable("IntegerParameters", bd.IntegerParameters = {}, Int32Array);
-    await readParquetTable("SingleParameters", bd.SingleParameters = {}, Int32Array);
-    await readParquetTable("StringParameters", bd.StringParameters = {}, Int32Array);
-    await readParquetTable("EntityParameters", bd.EntityParameters = {}, Int32Array);
-    await readParquetTable("PointParameters", bd.PointParameters = {}, Int32Array);
+  const entities = {};
+  await readParquetTableFromZip(zip, "Entities", entities, Int32Array, true);
+  if (Object.keys(entities).length > 0) {
+    bd.Entities = entities;
+  }
+  const stringsTable = {};
+  await readParquetTableFromZip(zip, "Strings", stringsTable, null, true);
+  const stringsValue = stringsTable.Strings;
+  if (Array.isArray(stringsValue)) {
+    bd.Strings = stringsValue;
+  }
+  if (options?.loadParameters) {
+    const descriptors = {};
+    await readParquetTableFromZip(zip, "Descriptors", descriptors, Int32Array);
+    bd.Descriptors = descriptors;
+    const integerParameters = {};
+    await readParquetTableFromZip(zip, "IntegerParameters", integerParameters, Int32Array);
+    bd.IntegerParameters = integerParameters;
+    const singleParameters = {};
+    await readParquetTableFromZip(zip, "SingleParameters", singleParameters, Int32Array);
+    bd.SingleParameters = singleParameters;
+    const stringParameters = {};
+    await readParquetTableFromZip(zip, "StringParameters", stringParameters, Int32Array);
+    bd.StringParameters = stringParameters;
+    const entityParameters = {};
+    await readParquetTableFromZip(zip, "EntityParameters", entityParameters, Int32Array);
+    bd.EntityParameters = entityParameters;
+    const pointParameters = {};
+    await readParquetTableFromZip(zip, "PointParameters", pointParameters, Int32Array);
+    bd.PointParameters = pointParameters;
   }
   return bd;
 }
+async function loadBimDataFromSourceMainThread(source, options) {
+  const response = await fetch(source);
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch BOS from ${source}: ${response.status} ${response.statusText}`
+    );
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  return loadBimDataFromZipMainThread(zip, options);
+}
+async function finalizeBimData(bimData, options) {
+  const instanceBuildMode = options?.instanceBuildMode ?? (options?.decodeMode === "workers" ? "worker" : "sync");
+  bimData.Instances = instanceBuildMode === "worker" ? await buildInstancesAsyncConsumeGeometry(bimData.BimGeometry, "worker") : buildInstances(bimData.BimGeometry);
+  bimData.Query = new BimQuery(bimData);
+  bimData.Resolver = bimData.Query.Resolver;
+  if (options?.renderMode === "view-state") {
+    bimData.ThreeGeometry = bimData.buildViewStateGeometry(bimData.Instances);
+    return bimData;
+  }
+  bimData.ThreeGeometry = await bimData.rebuildGeometryAsync(bimData.Instances);
+  return bimData;
+}
+class BimOpenSchemaLoader {
+  async load(source, options) {
+    const totalTimer = `[BOS loader] total geometry load ${source}`;
+    console.time(totalTimer);
+    try {
+      if (options?.decodeMode === "main-thread") {
+        const mainThreadData = await loadBimDataFromSourceMainThread(source, options);
+        return await finalizeBimData(mainThreadData, options);
+      }
+      const clients = getWorkerClients();
+      const extractedFiles = await getZipWorkerClient().extract(
+        source,
+        buildAllRequestedTables(options)
+      );
+      const vertexFiles = pickFiles(extractedFiles, VERTEX_TABLES);
+      const indexFiles = pickFiles(extractedFiles, INDEX_TABLES);
+      const otherTables = buildOtherTables(options);
+      const otherFiles = pickFiles(extractedFiles, otherTables);
+      const [vertexPayload, indexPayload, othersPayload] = await Promise.all([
+        clients.vertex.decode(vertexFiles),
+        clients.index.decode(indexFiles),
+        clients.others.decode(otherFiles)
+      ]);
+      const payload = mergePayloads([vertexPayload, indexPayload, othersPayload]);
+      return await finalizeBimData(materializeBimData(payload), options);
+    } finally {
+      console.timeEnd(totalTimer);
+    }
+  }
+}
+async function loadBimGeometryFromZip(zip, options) {
+  return loadBimDataFromZipMainThread(zip, options);
+}
+function __setWorkerClientsForTests(clients) {
+  workerClientsOverride = clients;
+}
+function __setZipWorkerClientForTests(client) {
+  zipWorkerClientOverride = client;
+}
+function disposeBimOpenSchemaWorkers() {
+  if (workerClients) {
+    workerClients.vertex.dispose?.();
+    workerClients.index.dispose?.();
+    workerClients.others.dispose?.();
+    workerClients = null;
+  }
+  if (zipWorkerClient) {
+    zipWorkerClient.dispose?.();
+    zipWorkerClient = null;
+  }
+}
 export {
   BimOpenSchemaLoader as B,
-  loadBimGeometryFromZip as l
+  ViewStateFlag as V,
+  __setWorkerClientsForTests as _,
+  __setZipWorkerClientForTests as a,
+  buildViewStateTextures as b,
+  ViewStateTable as c,
+  disposeBimOpenSchemaWorkers as d,
+  createViewStateMaterial as e,
+  loadBimGeometryFromZip as l,
+  setViewStateMaterialSelectionColor as s
 };
-//# sourceMappingURL=bimOpenSchemaLoader.4bddc573.js.map
+//# sourceMappingURL=bimOpenSchemaLoader.cde4167e.js.map

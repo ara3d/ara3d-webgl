@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>BOS Shader Selection Tuning Example</title>
+  
+  <style>
+    #selection-shader-panel {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      width: 340px;
+      max-height: calc(100vh - 20px);
+      overflow: auto;
+      background: rgba(20, 20, 22, 0.92);
+      color: #f2f2f2;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-size: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+      z-index: 1000;
+    }
+
+    #selection-shader-panel h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    #selection-shader-panel .row {
+      display: grid;
+      grid-template-columns: 120px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    #selection-shader-panel .row label {
+      opacity: 0.9;
+    }
+
+    #selection-shader-panel input[type="range"] {
+      width: 100%;
+    }
+
+    #selection-shader-panel input[type="color"] {
+      width: 100%;
+      height: 28px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      background: transparent;
+      padding: 2px;
+    }
+
+    #selection-shader-panel .value {
+      width: 52px;
+      text-align: right;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      opacity: 0.9;
+    }
+
+    #selection-shader-panel .controls {
+      display: flex;
+      gap: 8px;
+      margin: 10px 0;
+      flex-wrap: wrap;
+    }
+
+    #selection-shader-panel button {
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.92);
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+
+    #selection-shader-panel button:hover {
+      background: rgba(255, 255, 255, 0.10);
+    }
+
+    #selection-shader-panel .selected-list {
+      max-height: 180px;
+      overflow-y: auto;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      margin-top: 10px;
+      padding-top: 10px;
+    }
+
+    #selection-shader-panel .selected-item {
+      padding: 4px 6px;
+      margin: 2px 0;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      word-break: break-all;
+    }
+
+    #selection-shader-panel .hint {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 11px;
+      opacity: 0.75;
+      line-height: 1.4;
+    }
+  </style>
+  <script type="module" crossorigin src="/ara3d-webgl/assets/exampleBosSelectionShader.c08dc712.js"></script>
+  <link rel="modulepreload" crossorigin href="/ara3d-webgl/assets/bvhPrecompute.worker.858fae95.js">
+  <link rel="modulepreload" crossorigin href="/ara3d-webgl/assets/bimOpenSchemaLoader.cde4167e.js">
+  <link rel="stylesheet" href="/ara3d-webgl/assets/bvhPrecompute.c4c15feb.css">
+</head>
+<body>
+
+</body>
+</html>

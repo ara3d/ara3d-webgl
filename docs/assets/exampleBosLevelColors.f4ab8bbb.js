@@ -1,5 +1,5 @@
-import { V as Viewer, C as Color, w as MeshStandardMaterial, x as DoubleSide } from "./compressors.5793b060.js";
-import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.4bddc573.js";
+import { n as Viewer, C as Color, k as MeshStandardMaterial, D as DoubleSide } from "./bvhPrecompute.worker.858fae95.js";
+import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.cde4167e.js";
 const paletteState = {
   saturation: 0.45,
   lightness: 0.2,
@@ -119,4 +119,4 @@ async function runExample() {
   rebuildSceneGeometry();
 }
 runExample();
-//# sourceMappingURL=exampleBosLevelColors.2e7df632.js.map
+//# sourceMappingURL=exampleBosLevelColors.f4ab8bbb.js.map
