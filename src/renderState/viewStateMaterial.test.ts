@@ -136,4 +136,29 @@ describe('viewStateMaterial selection style', () => {
         const userData = material.userData as { viewStateOpacityDitherScale: number };
         expect(userData.viewStateOpacityDitherScale).toBe(96);
     });
+
+    it('updates opacity dither scale through style helper', () => {
+        const material = createViewStateMaterial({
+            textures: {
+                baseMaterial: createTexture(),
+                flags: createTexture(),
+                colorOverrides: createTexture()
+            },
+            instanceCount: 1,
+            materialCount: 1,
+            transparentPass: false
+        });
+
+        const shader = {
+            uniforms: {},
+            vertexShader: '#include <common>\n#include <begin_vertex>',
+            fragmentShader: '#include <common>\nvec4 diffuseColor = vec4( diffuse, opacity );'
+        } as any;
+        material.onBeforeCompile?.(shader);
+        setViewStateMaterialSelectionStyle(material, { opacityDitherScale: 128 });
+
+        expect(shader.uniforms.uOpacityDitherScale.value).toBe(128);
+        const userData = material.userData as { viewStateOpacityDitherScale: number };
+        expect(userData.viewStateOpacityDitherScale).toBe(128);
+    });
 });

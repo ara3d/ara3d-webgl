@@ -26,6 +26,7 @@ type ViewStateSelectionMaterialUserData = {
 export type ViewStateSelectionStyle = {
     color?: THREE.ColorRepresentation;
     mix?: number;
+    opacityDitherScale?: number;
 };
 
 function clamp01(value: number): number {
@@ -78,6 +79,9 @@ export function setViewStateMaterialSelectionStyle(
     }
     if (style.mix !== undefined) {
         setViewStateMaterialSelectionMix(material, style.mix);
+    }
+    if (style.opacityDitherScale !== undefined) {
+        setViewStateMaterialOpacityDitherScale(material, style.opacityDitherScale);
     }
 }
 
