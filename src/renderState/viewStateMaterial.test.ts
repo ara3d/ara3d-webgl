@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { createViewStateMaterial, setViewStateMaterialSelectionColor } from './viewStateMaterial';
+import {
+    createViewStateMaterial,
+    setViewStateMaterialSelectionColor,
+    setViewStateMaterialSelectionMix,
+    setViewStateMaterialSelectionStyle
+} from './viewStateMaterial';
 
 function createTexture(width = 1, height = 1): THREE.DataTexture {
     const data = new Uint8Array(width * height * 4);
@@ -28,5 +33,50 @@ describe('viewStateMaterial selection style', () => {
             material.userData as { viewStateSelectionUniforms: { color: THREE.Color } }
         ).viewStateSelectionUniforms;
         expect(uniforms.color.getHexString()).toBe('ff00aa');
+    });
+
+    it('updates selection mix and syncs compiled shader uniform without recompile', () => {
+        const material = createViewStateMaterial({
+            textures: {
+                baseMaterial: createTexture(),
+                flags: createTexture(),
+                colorOverrides: createTexture()
+            },
+            instanceCount: 1,
+            materialCount: 1,
+            transparentPass: false
+        });
+
+        const shader = { uniforms: {}, vertexShader: '', fragmentShader: '' } as any;
+        material.onBeforeCompile?.(shader);
+        setViewStateMaterialSelectionMix(material, 0.42);
+
+        expect(shader.uniforms.uSelectionMix.value).toBeCloseTo(0.42, 5);
+        const uniforms = (
+            material.userData as { viewStateSelectionUniforms: { mix: number } }
+        ).viewStateSelectionUniforms;
+        expect(uniforms.mix).toBeCloseTo(0.42, 5);
+    });
+
+    it('clamps mix through style helper', () => {
+        const material = createViewStateMaterial({
+            textures: {
+                baseMaterial: createTexture(),
+                flags: createTexture(),
+                colorOverrides: createTexture()
+            },
+            instanceCount: 1,
+            materialCount: 1,
+            transparentPass: false
+        });
+
+        setViewStateMaterialSelectionStyle(material, { color: '#3366ff', mix: 2.5 });
+        const uniforms = (
+            material.userData as {
+                viewStateSelectionUniforms: { color: THREE.Color; mix: number };
+            }
+        ).viewStateSelectionUniforms;
+        expect(uniforms.color.getHexString()).toBe('3366ff');
+        expect(uniforms.mix).toBe(1);
     });
 });

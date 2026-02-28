@@ -16,18 +16,62 @@ export type ViewStateSelectionUniforms = {
     mix: number;
 };
 
+type ViewStateSelectionMaterialUserData = {
+    viewStateSelectionUniforms?: ViewStateSelectionUniforms;
+    viewStateSelectionMixUniform?: { value: number };
+};
+
+export type ViewStateSelectionStyle = {
+    color?: THREE.ColorRepresentation;
+    mix?: number;
+};
+
+function clamp01(value: number): number {
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.min(1, value));
+}
+
+function getSelectionUserData(
+    material: THREE.Material | null | undefined
+): ViewStateSelectionMaterialUserData | null {
+    if (!material) return null;
+    return material.userData as ViewStateSelectionMaterialUserData;
+}
+
 export function setViewStateMaterialSelectionColor(
     material: THREE.Material | null | undefined,
     color: THREE.ColorRepresentation
 ): void {
-    if (!material) return;
-    const uniforms = (
-        material.userData as {
-            viewStateSelectionUniforms?: ViewStateSelectionUniforms;
-        }
-    ).viewStateSelectionUniforms;
+    const uniforms = getSelectionUserData(material)?.viewStateSelectionUniforms;
     if (!uniforms) return;
     uniforms.color.set(color);
+}
+
+export function setViewStateMaterialSelectionMix(
+    material: THREE.Material | null | undefined,
+    mix: number
+): void {
+    const userData = getSelectionUserData(material);
+    const uniforms = userData?.viewStateSelectionUniforms;
+    if (!uniforms) return;
+    const clampedMix = clamp01(mix);
+    uniforms.mix = clampedMix;
+    if (userData?.viewStateSelectionMixUniform) {
+        userData.viewStateSelectionMixUniform.value = clampedMix;
+    }
+}
+
+export function setViewStateMaterialSelectionStyle(
+    material: THREE.Material | null | undefined,
+    style: ViewStateSelectionStyle
+): void {
+    if (!style) return;
+    if (style.color !== undefined) {
+        setViewStateMaterialSelectionColor(material, style.color);
+    }
+    if (style.mix !== undefined) {
+        setViewStateMaterialSelectionMix(material, style.mix);
+    }
 }
 
 export function createViewStateMaterial(
@@ -58,6 +102,9 @@ export function createViewStateMaterial(
         };
         shader.uniforms.uSelectionColor = { value: selectionUniforms.color };
         shader.uniforms.uSelectionMix = { value: selectionUniforms.mix };
+        (
+            material.userData as ViewStateSelectionMaterialUserData
+        ).viewStateSelectionMixUniform = shader.uniforms.uSelectionMix as { value: number };
         shader.uniforms.uInstanceCount = {
             value: Math.max(1, options.instanceCount),
         };

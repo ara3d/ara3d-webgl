@@ -11,3 +11,4 @@ export * from './renderState/viewStateTable';
 export * from './renderState/viewStateMaterial';
 export * from './viewer/features/bvhRaycastManager';
 export * from './viewer/features/selectionOverlay';
+export * from './viewer/features/selectionOutline';
