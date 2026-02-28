@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import {
     createViewStateMaterial,
+    setViewStateMaterialOpacityDitherScale,
     setViewStateMaterialSelectionColor,
     setViewStateMaterialSelectionMix,
     setViewStateMaterialSelectionStyle
@@ -106,7 +107,33 @@ describe('viewStateMaterial selection style', () => {
         expect(shader.fragmentShader.includes('hasOpacityOverride')).toBe(true);
         expect(shader.fragmentShader.includes('hasColorOverride')).toBe(true);
         expect(shader.fragmentShader.includes('uTransparentPass')).toBe(true);
+        expect(shader.fragmentShader.includes('uOpacityDitherScale')).toBe(true);
         expect(shader.vertexShader.includes('vWorldPos')).toBe(true);
         expect(shader.fragmentShader.includes('vWorldPos')).toBe(true);
+    });
+
+    it('updates opacity dither scale and syncs compiled shader uniform', () => {
+        const material = createViewStateMaterial({
+            textures: {
+                baseMaterial: createTexture(),
+                flags: createTexture(),
+                colorOverrides: createTexture()
+            },
+            instanceCount: 1,
+            materialCount: 1,
+            transparentPass: false
+        });
+
+        const shader = {
+            uniforms: {},
+            vertexShader: '#include <common>\n#include <begin_vertex>',
+            fragmentShader: '#include <common>\nvec4 diffuseColor = vec4( diffuse, opacity );'
+        } as any;
+        material.onBeforeCompile?.(shader);
+        setViewStateMaterialOpacityDitherScale(material, 96);
+
+        expect(shader.uniforms.uOpacityDitherScale.value).toBe(96);
+        const userData = material.userData as { viewStateOpacityDitherScale: number };
+        expect(userData.viewStateOpacityDitherScale).toBe(96);
     });
 });

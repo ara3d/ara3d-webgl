@@ -19,6 +19,8 @@ export type ViewStateSelectionUniforms = {
 type ViewStateSelectionMaterialUserData = {
     viewStateSelectionUniforms?: ViewStateSelectionUniforms;
     viewStateSelectionMixUniform?: { value: number };
+    viewStateOpacityDitherScale?: number;
+    viewStateOpacityDitherScaleUniform?: { value: number };
 };
 
 export type ViewStateSelectionStyle = {
@@ -29,6 +31,11 @@ export type ViewStateSelectionStyle = {
 function clamp01(value: number): number {
     if (!Number.isFinite(value)) return 0;
     return Math.max(0, Math.min(1, value));
+}
+
+function clampOpacityDitherScale(value: number): number {
+    if (!Number.isFinite(value)) return 32;
+    return Math.max(1, Math.min(512, value));
 }
 
 function getSelectionUserData(
@@ -74,6 +81,19 @@ export function setViewStateMaterialSelectionStyle(
     }
 }
 
+export function setViewStateMaterialOpacityDitherScale(
+    material: THREE.Material | null | undefined,
+    scale: number
+): void {
+    const userData = getSelectionUserData(material);
+    if (!userData) return;
+    const clamped = clampOpacityDitherScale(scale);
+    userData.viewStateOpacityDitherScale = clamped;
+    if (userData.viewStateOpacityDitherScaleUniform) {
+        userData.viewStateOpacityDitherScaleUniform.value = clamped;
+    }
+}
+
 export function createViewStateMaterial(
     options: ViewStateMaterialOptions
 ): THREE.MeshStandardMaterial {
@@ -91,6 +111,9 @@ export function createViewStateMaterial(
         side: THREE.DoubleSide,
     });
     material.userData.viewStateSelectionUniforms = selectionUniforms;
+    (
+        material.userData as ViewStateSelectionMaterialUserData
+    ).viewStateOpacityDitherScale = 32;
 
     material.onBeforeCompile = (shader) => {
         shader.uniforms.uBaseMaterialTex = {
@@ -102,9 +125,13 @@ export function createViewStateMaterial(
         };
         shader.uniforms.uSelectionColor = { value: selectionUniforms.color };
         shader.uniforms.uSelectionMix = { value: selectionUniforms.mix };
-        (
-            material.userData as ViewStateSelectionMaterialUserData
-        ).viewStateSelectionMixUniform = shader.uniforms.uSelectionMix as { value: number };
+        const userData = material.userData as ViewStateSelectionMaterialUserData;
+        userData.viewStateSelectionMixUniform = shader.uniforms.uSelectionMix as { value: number };
+        shader.uniforms.uOpacityDitherScale = {
+            value: userData.viewStateOpacityDitherScale ?? 32,
+        };
+        userData.viewStateOpacityDitherScaleUniform = shader.uniforms
+            .uOpacityDitherScale as { value: number };
         shader.uniforms.uTransparentPass = {
             value: options.transparentPass ? 1 : 0,
         };
@@ -160,6 +187,7 @@ uniform sampler2D uViewFlagsTex;
 uniform sampler2D uColorOverridesTex;
 uniform vec3 uSelectionColor;
 uniform float uSelectionMix;
+uniform float uOpacityDitherScale;
 uniform float uTransparentPass;
 uniform float uInstanceCount;
 uniform float uMaterialCount;
@@ -236,7 +264,7 @@ if (!isVisible) {
 // runtime ghosting/opacity on those buckets without rebuilding/sorting,
 // approximate alpha using ordered dithering.
 if (uTransparentPass < 0.5 && finalOpacity < 0.999) {
-    vec3 worldCell = floor(vWorldPos * 32.0);
+    vec3 worldCell = floor(vWorldPos * uOpacityDitherScale);
     float noise = fract(
         sin(dot(worldCell + vec3(vInstanceId * 0.173), vec3(12.9898, 78.233, 45.164))) * 43758.5453
     );
