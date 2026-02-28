@@ -208,7 +208,11 @@ varying vec3 vWorldPos;`
                 `#include <begin_vertex>
 vInstanceId = instanceId;
 vMaterialId = materialId;
-vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;`
+vec4 worldPos = vec4(position, 1.0);
+#ifdef USE_INSTANCING
+worldPos = instanceMatrix * worldPos;
+#endif
+vWorldPos = (modelMatrix * worldPos).xyz;`
             );
 
         shader.fragmentShader = shader.fragmentShader
