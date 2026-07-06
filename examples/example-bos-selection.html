@@ -79,7 +79,7 @@ import * as THREE from 'three';
 
 async function runExample() {
     // Initialize viewer
-    const viewer = new ARA3D.Viewer();
+    const viewer = new ARA3D.Viewer({ fileDrop: { enable: false } });
     const loader = new ARA3D.BimOpenSchemaLoader();
     
     console.time('Loading .bos file');

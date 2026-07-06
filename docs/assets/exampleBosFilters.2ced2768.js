@@ -1,5 +1,4 @@
-import { V as Viewer, w as MeshStandardMaterial } from "./compressors.8dce4834.js";
-import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.ad41252a.js";
+import { V as Viewer, B as BimOpenSchemaLoader, y as MeshStandardMaterial } from "./viewer.cf996c39.js";
 function showFilter(name, filter, onChange) {
   if (!name || !filter) {
     const existing = document.getElementById("ara3d-filter-panel");
@@ -326,7 +325,7 @@ function showFilter(name, filter, onChange) {
   notify();
 }
 async function runExample() {
-  const viewer = new Viewer();
+  const viewer = new Viewer({ fileDrop: { enable: false } });
   const loader = new BimOpenSchemaLoader();
   console.time("Loading .bos file");
   const bimData = await loader.load("/ara3d-webgl/Snowdon Towers Sample Architectural.bos");
@@ -377,4 +376,4 @@ async function runExample() {
   console.timeEnd("Creating filter");
 }
 runExample();
-//# sourceMappingURL=exampleBosFilters.69f1bcfc.js.map
+//# sourceMappingURL=exampleBosFilters.2ced2768.js.map

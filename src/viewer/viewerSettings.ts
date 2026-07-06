@@ -1,9 +1,9 @@
-import * as THREE from 'three';
-import deepmerge from 'deepmerge';
-import { floor } from '../images';
+import * as THREE from 'three'
+import deepmerge from 'deepmerge'
+import { floor } from '../images'
 
 export type TextureEncoding = 'url' | 'base64' | undefined;
-export { GizmoOptions } from './gizmos/gizmoAxes';
+export { GizmoOptions } from './gizmos/gizmoAxes'
 
 /**
  * Makes all field optional recursively
@@ -119,73 +119,87 @@ export type Settings = {
     rendering: {
         onDemand: boolean;
     };
+
+    /**
+     * Drag-and-drop options for loading local BOS files onto the canvas.
+     */
+    fileDrop: {
+        enable: boolean;
+        loadParameters: boolean;
+        extensions: string[];
+    };
 };
 
 export type PartialSettings = RecursivePartial<Settings>;
 
 const defaultConfig: Settings = {
-    canvas: {
-        id: undefined,
-        resizeDelay: 200,
+  canvas: {
+    id: undefined,
+    resizeDelay: 200
+  },
+  camera: {
+    orthographic: false,
+    allowedMovement: new THREE.Vector3(1, 1, 1),
+    allowedRotation: new THREE.Vector2(1, 1),
+    near: 0.01,
+    far: 15000,
+    fov: 50,
+    zoom: 1,
+    // 45 deg down looking down z.
+    forward: new THREE.Vector3(0, -0.707, 0.707),
+    controls: {
+      orbit: true,
+      rotateSpeed: 1,
+      orbitSpeed: 1,
+      moveSpeed: 1
     },
-    camera: {
-        orthographic: false,
-        allowedMovement: new THREE.Vector3(1, 1, 1),
-        allowedRotation: new THREE.Vector2(1, 1),
-        near: 0.01,
-        far: 15000,
-        fov: 50,
-        zoom: 1,
-        // 45 deg down looking down z.
-        forward: new THREE.Vector3(0, -0.707, 0.707),
-        controls: {
-            orbit: true,
-            rotateSpeed: 1,
-            orbitSpeed: 1,
-            moveSpeed: 1,
-        },
 
-        gizmo: {
-            enable: true,
-            size: 0.01,
-            color: new THREE.Color(0xff, 0xff, 0xff),
-            opacity: 0.5,
-            opacityAlways: 0.125,
-        },
+    gizmo: {
+      enable: true,
+      size: 0.01,
+      color: new THREE.Color(0xff, 0xff, 0xff),
+      opacity: 0.5,
+      opacityAlways: 0.125
+    }
+  },
+  background: { color: new THREE.Color('#96999f') },
+  groundPlane: {
+    visible: true,
+    encoding: 'base64',
+    texture: floor,
+    opacity: 1,
+    color: new THREE.Color(0xff, 0xff, 0xff),
+    size: 5
+  },
+  skylight: {
+    skyColor: new THREE.Color().setHSL(0.6, 1, 0.6),
+    groundColor: new THREE.Color().setHSL(0.095, 1, 0.75),
+    intensity: 0.8
+  },
+  sunLights: [
+    {
+      position: new THREE.Vector3(-45.0, 40, -23),
+      color: new THREE.Color().setHSL(0.1, 1, 0.95),
+      intensity: 0.8
     },
-    background: { color: new THREE.Color('#96999f') },
-    groundPlane: {
-        visible: true,
-        encoding: 'base64',
-        texture: floor,
-        opacity: 1,
-        color: new THREE.Color(0xff, 0xff, 0xff),
-        size: 5,
-    },
-    skylight: {
-        skyColor: new THREE.Color().setHSL(0.6, 1, 0.6),
-        groundColor: new THREE.Color().setHSL(0.095, 1, 0.75),
-        intensity: 0.8,
-    },
-    sunLights: [
-        {
-            position: new THREE.Vector3(-45.0, 40, -23),
-            color: new THREE.Color().setHSL(0.1, 1, 0.95),
-            intensity: 0.8,
-        },
-        {
-            position: new THREE.Vector3(45.0, 40, 23),
-            color: new THREE.Color().setHSL(0.1, 1, 0.95),
-            intensity: 0.2,
-        },
-    ],
-    rendering: {
-        onDemand: true,
-    },
-};
+    {
+      position: new THREE.Vector3(45.0, 40, 23),
+      color: new THREE.Color().setHSL(0.1, 1, 0.95),
+      intensity: 0.2
+    }
+  ],
+  rendering: {
+    onDemand: true
+  },
+  fileDrop: {
+    enable: true,
+    loadParameters: false,
+    extensions: ['.bos']
+  }
+}
 
-export function getSettings(options?: PartialSettings) {
-    return options
-        ? (deepmerge(defaultConfig, options, undefined) as Settings)
-        : (defaultConfig as Settings);
+export function getSettings (options?: PartialSettings) {
+  return options
+    ? (deepmerge(defaultConfig, options, undefined) as Settings)
+    : (defaultConfig as Settings)
 }

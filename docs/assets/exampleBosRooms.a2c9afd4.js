@@ -1,5 +1,4 @@
-import { V as Viewer, w as MeshStandardMaterial, C as Color } from "./compressors.8dce4834.js";
-import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.ad41252a.js";
+import { V as Viewer, B as BimOpenSchemaLoader, y as MeshStandardMaterial, C as Color } from "./viewer.cf996c39.js";
 import { D as DataTable } from "./DataTable.080f84a9.js";
 const TABULATOR_CSS = "https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css";
 const TABULATOR_JS = "https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js";
@@ -922,7 +921,7 @@ async function runExample() {
   setupDividerResize();
   const leftPane = document.getElementById("leftPane");
   const gridHost = document.getElementById("gridHost");
-  const viewer = new Viewer();
+  const viewer = new Viewer({ fileDrop: { enable: false } });
   const canvas = document.querySelector(".ara3d-canvas");
   leftPane.appendChild(canvas);
   const loader = new BimOpenSchemaLoader();
@@ -1062,4 +1061,4 @@ async function runExample() {
   refreshColorsFromCurrentChoice();
 }
 runExample();
-//# sourceMappingURL=exampleBosRooms.5d37518f.js.map
+//# sourceMappingURL=exampleBosRooms.a2c9afd4.js.map

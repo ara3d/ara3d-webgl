@@ -1,7 +1,6 @@
-import { V as Viewer, aw as Raycaster, w as MeshStandardMaterial, i as Vector2 } from "./compressors.8dce4834.js";
-import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.ad41252a.js";
+import { V as Viewer, av as Raycaster, y as MeshStandardMaterial, B as BimOpenSchemaLoader, i as Vector2 } from "./viewer.cf996c39.js";
 async function runExample() {
-  const viewer = new Viewer();
+  const viewer = new Viewer({ fileDrop: { enable: false } });
   const loader = new BimOpenSchemaLoader();
   console.time("Loading .bos file");
   const bimData = await loader.load("/ara3d-webgl/Snowdon Towers Sample Architectural.bos");
@@ -181,4 +180,4 @@ async function runExample() {
   console.log("Viewport selection example ready. Click on objects to select them.");
 }
 runExample();
-//# sourceMappingURL=exampleBosSelection.748967d0.js.map
+//# sourceMappingURL=exampleBosSelection.23d67743.js.map

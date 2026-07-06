@@ -1,5 +1,4 @@
-import { V as Viewer, C as Color, w as MeshStandardMaterial, x as DoubleSide } from "./compressors.8dce4834.js";
-import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.ad41252a.js";
+import { V as Viewer, B as BimOpenSchemaLoader, C as Color, y as MeshStandardMaterial, z as DoubleSide } from "./viewer.cf996c39.js";
 const paletteState = {
   saturation: 0.45,
   lightness: 0.2,
@@ -108,7 +107,7 @@ function bindUI() {
   });
 }
 async function runExample() {
-  viewer = new Viewer();
+  viewer = new Viewer({ fileDrop: { enable: false } });
   const loader = new BimOpenSchemaLoader();
   console.time("Loading .bos file");
   bimData = await loader.load("/ara3d-webgl/Snowdon Towers Sample Architectural.bos", { loadParameters: true });
@@ -119,4 +118,4 @@ async function runExample() {
   rebuildSceneGeometry();
 }
 runExample();
-//# sourceMappingURL=exampleBosLevelColors.12221501.js.map
+//# sourceMappingURL=exampleBosLevelColors.1c795ea9.js.map
