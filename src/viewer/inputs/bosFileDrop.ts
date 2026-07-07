@@ -56,10 +56,26 @@ export class BosFileDropHandler extends InputHandler {
   }
 
   protected override addListeners (): void {
+    // Allow file drops anywhere in the page; canvas handler loads the model.
+    this.reg(window, 'dragover', this.onWindowDragOver)
+    this.reg(window, 'drop', this.onWindowDrop)
+
     this.reg(this.canvas, 'dragenter', this.onDragEnter)
     this.reg(this.canvas, 'dragover', this.onDragOver)
     this.reg(this.canvas, 'dragleave', this.onDragLeave)
     this.reg(this.canvas, 'drop', this.onDrop)
+  }
+
+  private onWindowDragOver = (event: DragEvent) => {
+    if (this.isFileDrag(event)) {
+      event.preventDefault()
+    }
+  }
+
+  private onWindowDrop = (event: DragEvent) => {
+    if (this.isFileDrag(event)) {
+      event.preventDefault()
+    }
   }
 
   override reset = () => {
@@ -68,7 +84,7 @@ export class BosFileDropHandler extends InputHandler {
   }
 
   private onDragEnter = (event: DragEvent) => {
-    if (!this.hasBosFile(event)) return
+    if (!this.isFileDrag(event)) return
     event.preventDefault()
     event.stopPropagation()
     this._dragDepth++
@@ -76,7 +92,7 @@ export class BosFileDropHandler extends InputHandler {
   }
 
   private onDragOver = (event: DragEvent) => {
-    if (!this.hasBosFile(event)) return
+    if (!this.isFileDrag(event)) return
     event.preventDefault()
     event.stopPropagation()
     if (event.dataTransfer) {
@@ -85,7 +101,6 @@ export class BosFileDropHandler extends InputHandler {
   }
 
   private onDragLeave = (event: DragEvent) => {
-    if (!this.hasBosFile(event)) return
     event.preventDefault()
     event.stopPropagation()
     this._dragDepth = Math.max(0, this._dragDepth - 1)
@@ -125,22 +140,26 @@ export class BosFileDropHandler extends InputHandler {
     }
   }
 
-  private hasBosFile (event: DragEvent): boolean {
-    const items = event.dataTransfer?.items
-    if (items?.length) {
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i]
-        if (item.kind !== 'file') continue
-        const name = item.getAsFile()?.name ?? ''
-        if (fileMatchesExtensions(name, this.settings.extensions)) {
-          return true
-        }
+  /**
+   * True when the drag carries files. Filenames are not available until drop,
+   * so extension checks belong in onDrop only.
+   */
+  private isFileDrag (event: DragEvent): boolean {
+    const dt = event.dataTransfer
+    if (!dt) return false
+
+    const types = dt.types
+    if (types) {
+      for (let i = 0; i < types.length; i++) {
+        if (types[i] === 'Files') return true
       }
     }
 
-    const files = event.dataTransfer?.files
-    if (files?.length) {
-      return findBosFile(files, this.settings.extensions) !== undefined
+    const items = dt.items
+    if (items?.length) {
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === 'file') return true
+      }
     }
 
     return false
