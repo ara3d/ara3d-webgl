@@ -13,6 +13,7 @@ import { showFilter } from './filterPanel.js';
 import * as THREE from 'three';
 
 async function runExample() {
+    // Drag-and-drop a local .bos file onto the canvas to open it.
     const viewer = new ARA3D.Viewer();
     const loader = new ARA3D.BimOpenSchemaLoader();
     console.time('Loading .bos file');

@@ -1,4 +1,4 @@
-import { V as Viewer, ak as SphereGeometry, al as IcosahedronGeometry, am as OctahedronGeometry, an as TetrahedronGeometry, ao as PlaneGeometry, ap as BoxGeometry, aq as CircleGeometry, ar as RingGeometry, as as CylinderGeometry, at as ConeGeometry, au as TorusGeometry, av as TorusKnotGeometry, w as MeshStandardMaterial, C as Color, E as Mesh } from "./compressors.8dce4834.js";
+import { V as Viewer, aj as SphereGeometry, ak as IcosahedronGeometry, al as OctahedronGeometry, am as TetrahedronGeometry, an as PlaneGeometry, ao as BoxGeometry, ap as CircleGeometry, aq as RingGeometry, ar as CylinderGeometry, as as ConeGeometry, at as TorusGeometry, au as TorusKnotGeometry, y as MeshStandardMaterial, C as Color, H as Mesh } from "./viewer.cf996c39.js";
 async function runExample() {
   const viewer = new Viewer();
   const geometries = [
@@ -41,4 +41,4 @@ async function runExample() {
   }
 }
 runExample();
-//# sourceMappingURL=exampleGeometry.2e4b76a7.js.map
+//# sourceMappingURL=exampleGeometry.6e3f50f7.js.map
