@@ -68,7 +68,54 @@
     import * as ARA3D from "../src/index";
     import { showParameterGrid } from "./parameterGrid.js";  
     import { showGradientChooser } from "./gradientChooser.js";
+    import { bindBosHotSwap } from "./bosHotSwap.js";
     import * as THREE from "three";
+
+    function buildRoomTable(data) {
+      const roomInstances = [];
+      for (const inst of data.Instances) {
+        inst.visible = data.Resolver.GetInstanceCategoryName(inst) === "Rooms";
+        if (inst.visible) roomInstances.push(inst);
+      }
+
+      const roomTable = new ARA3D.DataTable();
+      roomTable.exportNullForMissing = true;
+      roomTable.ensureColumn("__entity");
+      roomTable.ensureColumn("RoomName");
+
+      const entityToRowIndex = new Map();
+
+      for (const inst of roomInstances) {
+        const entityKey = inst.entity;
+        const params = data.Resolver.ParameterMap.get(inst.entity) ?? [];
+        const names = ["__entity", "RoomName"];
+        const values = [entityKey, (data.Resolver.GetInstanceName(inst) ?? "")];
+
+        for (const p of params) {
+          if (!p?.Name) continue;
+          names.push(String(p.Name));
+          values.push(p.Value);
+        }
+
+        const rowIndex = roomTable.addRowFromNamesAndValues(names, values);
+        entityToRowIndex.set(entityKey, rowIndex);
+      }
+
+      const pinnedFirst = ["RoomName"];
+      const pinnedSet = new Set(pinnedFirst);
+      const skippedSet = new Set(
+        roomTable.getColumnNames().filter((n) => roomTable.isColumnMostlySame(n))
+      );
+      const colNames = roomTable.getColumnNames();
+      const orderedColNames = [
+        ...pinnedFirst.filter((c) => colNames.includes(c)),
+        ...colNames
+          .filter((c) => !pinnedSet.has(c) && !skippedSet.has(c))
+          .sort((a, b) => a.localeCompare(b)),
+      ];
+
+      return { roomInstances, roomTable, entityToRowIndex, orderedColNames };
+    }
 
     function setupDividerResize() {
       const app = document.getElementById("app");
@@ -114,37 +161,43 @@
       const leftPane = document.getElementById("leftPane");
       const gridHost = document.getElementById("gridHost");
       
-      const viewer = new ARA3D.Viewer({ fileDrop: { enable: false } });
+      const viewer = new ARA3D.Viewer({
+        fileDrop: { enable: true, autoAdd: false, loadParameters: true },
+      });
 
       const canvas = document.querySelector(".ara3d-canvas");
       leftPane.appendChild(canvas);
 
       const loader = new ARA3D.BimOpenSchemaLoader();
 
-      const bimData = await loader.load(
-        "/ara3d-webgl/Snowdon Towers Sample Architectural.bos",
-        { loadParameters: true }
-      );
-
-      const roomInstances = [];
-      for (const inst of bimData.Instances) {
-        inst.visible = bimData.Resolver.GetInstanceCategoryName(inst) === "Rooms";
-        if (inst.visible) roomInstances.push(inst);
-      }
+      let bimData;
+      let roomInstances = [];
+      let roomTable;
+      let entityToRowIndex = new Map();
+      let orderedColNames = [];
 
       let currentRoom = null;
       let ghostGroup = null;
       let mainGroup = null;
       let singleRooms = [];
       let ghostedRoomInstances = [];
+      let grid;
+      let gradientChooser;
+
+      function removeAllGroups() {
+        if (mainGroup) viewer.remove(mainGroup);
+        if (ghostGroup) viewer.remove(ghostGroup);
+        if (currentRoom) viewer.remove(currentRoom);
+        mainGroup = null;
+        ghostGroup = null;
+        currentRoom = null;
+      }
 
       function rebuild() {
-        viewer.remove(mainGroup);
-        viewer.remove(ghostGroup);
-        viewer.remove(currentRoom);
+        removeAllGroups();
 
         ghostedRoomInstances = roomInstances.map(ghostedInstance);
-        singleRooms = roomInstances.map(i => bimData.rebuildGeometry([i]));
+        singleRooms = roomInstances.map((i) => bimData.rebuildGeometry([i]));
         mainGroup = bimData.rebuildGeometry(roomInstances);
         ghostGroup = bimData.rebuildGeometry(ghostedRoomInstances);
 
@@ -177,39 +230,10 @@
         rebuild();
       }
 
-      // --------------------------------------------------------------------
-      // Build a DataTable from room parameters
-      // --------------------------------------------------------------------
-      const roomTable = new ARA3D.DataTable();
-      roomTable.exportNullForMissing = true;
-
-      roomTable.ensureColumn("__entity"); // stable id (recommended)
-      roomTable.ensureColumn("RoomName");
-
-      // Map entity -> rowIndex for stable edits even with sorting/filtering
-      const entityToRowIndex = new Map();
-
-      for (const inst of roomInstances) {
-        const entityKey = inst.entity;
-        const params = bimData.Resolver.ParameterMap.get(inst.entity) ?? [];
-
-        const names = ["__entity", "RoomName"];
-        const values = [entityKey, (bimData.Resolver.GetInstanceName(inst) ?? "")];
-
-        for (const p of params) {
-          if (!p?.Name) continue;
-          names.push(String(p.Name));
-          values.push(p.Value);
-        }
-
-        const rowIndex = roomTable.addRowFromNamesAndValues(names, values);
-        entityToRowIndex.set(entityKey, rowIndex);
-      }
-
       function getValuesForParameter(parameterName) {
         const col = roomTable.tryGetColumnFromName(parameterName);
-        if (!col) return roomInstances.map(_ => null);
-        return col.slice(); 
+        if (!col) return roomInstances.map((_) => null);
+        return col.slice();
       }
 
       // --------------------------------------------------------------------
@@ -244,20 +268,39 @@
 
       // --------------------------------------------------------------------
       // Show parameter grid (right side), driven by DataTable
-      // --------------------------------------------------------------------      
-        const pinnedFirst = ["RoomName"];
-        const pinnedSet = new Set(pinnedFirst);
-        const skippedSet = new Set(roomTable.getColumnNames().filter(n => roomTable.isColumnMostlySame(n)));
+      // --------------------------------------------------------------------
+      function setModel(data) {
+        removeAllGroups();
+        bimData = data;
+        currentRoom = null;
+        materialCache.clear();
 
-        const colNames = roomTable.getColumnNames();
-        const orderedColNames = [
-            ...pinnedFirst.filter(c => colNames.includes(c)),
-            ...colNames
-            .filter(c => !pinnedSet.has(c) && !skippedSet.has(c))
-            .sort((a, b) => a.localeCompare(b)),
-        ];
-        
-        const grid = await showParameterGrid({
+        const built = buildRoomTable(bimData);
+        roomInstances = built.roomInstances;
+        roomTable = built.roomTable;
+        entityToRowIndex = built.entityToRowIndex;
+        orderedColNames = built.orderedColNames;
+
+        if (grid) {
+          grid.setDataTable(roomTable.project({ columns: orderedColNames }));
+          gradientChooser.setParameterNames(orderedColNames);
+        }
+        rebuild();
+        refreshColorsFromCurrentChoice();
+      }
+
+      const initialData = await loader.load(
+        "/ara3d-webgl/Snowdon Towers Sample Architectural.bos",
+        { loadParameters: true }
+      );
+      bimData = initialData;
+      const initialBuilt = buildRoomTable(bimData);
+      roomInstances = initialBuilt.roomInstances;
+      roomTable = initialBuilt.roomTable;
+      entityToRowIndex = initialBuilt.entityToRowIndex;
+      orderedColNames = initialBuilt.orderedColNames;
+
+      grid = await showParameterGrid({
             host: gridHost,
             dataTable: roomTable.project({columns: orderedColNames }),
             title: "Room Parameters",
@@ -289,12 +332,7 @@
             // tabulatorOptions: { ... }
         });
 
-      // --------------------------------------------------------------------
-      // Initial build + Gradient chooser
-      // --------------------------------------------------------------------
-      rebuild();
-
-      showGradientChooser({
+      gradientChooser = showGradientChooser({
         parameterNames: orderedColNames,
         getValuesForParameter,
         onChange: ({ parameterName, mapValueToColor, mode, order }) => {
@@ -306,6 +344,8 @@
         title: "Color Rooms",
       });
 
+      bindBosHotSwap(viewer, setModel);
+      rebuild();
       refreshColorsFromCurrentChoice();
     }
 

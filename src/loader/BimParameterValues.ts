@@ -1,5 +1,4 @@
-import { EntityIndex, DescriptorIndex } from './bimData';
-
+import { EntityIndex, DescriptorIndex } from './bimData'
 
 export interface BimParameterValues {
     Entity: Array<EntityIndex>;

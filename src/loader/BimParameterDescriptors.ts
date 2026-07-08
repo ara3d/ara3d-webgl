@@ -1,4 +1,4 @@
-import { StringIndex } from './bimData';
+import { StringIndex } from './bimData'
 
 export interface BimParameterDescriptors {
     Name: Array<StringIndex>;

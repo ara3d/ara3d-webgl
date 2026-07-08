@@ -127,6 +127,8 @@ export type Settings = {
         enable: boolean;
         loadParameters: boolean;
         extensions: string[];
+        /** When false, only load and fire onBosFileLoaded; subscriber adds geometry. */
+        autoAdd: boolean;
     };
 };
 
@@ -194,12 +196,24 @@ const defaultConfig: Settings = {
   fileDrop: {
     enable: true,
     loadParameters: false,
-    extensions: ['.bos']
+    extensions: ['.bos'],
+    autoAdd: true
   }
+}
+
+function isMergeableObject (value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  if (value instanceof THREE.Color) return false
+  if (value instanceof THREE.Vector2) return false
+  if (value instanceof THREE.Vector3) return false
+  if (value instanceof Date) return false
+  if (value instanceof RegExp) return false
+  const proto = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
 }
 
 export function getSettings (options?: PartialSettings) {
   return options
-    ? (deepmerge(defaultConfig, options, undefined) as Settings)
+    ? (deepmerge(defaultConfig, options, { isMergeableObject }) as Settings)
     : (defaultConfig as Settings)
 }
