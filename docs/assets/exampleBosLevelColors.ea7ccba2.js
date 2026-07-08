@@ -1,5 +1,5 @@
-import { V as Viewer, B as BimOpenSchemaLoader, C as Color, y as MeshStandardMaterial, z as DoubleSide } from "./viewer.02dcc5b2.js";
-import { b as bindBosHotSwap } from "./bosHotSwap.3875f6ba.js";
+import { V as Viewer, B as BimOpenSchemaLoader, C as Color, y as MeshStandardMaterial, z as DoubleSide } from "./viewer.bb973d67.js";
+import { b as bindBosHotSwap } from "./bosHotSwap.a48ac0b2.js";
 const paletteState = {
   saturation: 0.45,
   lightness: 0.2,
@@ -126,4 +126,4 @@ async function runExample() {
   setModel(data);
 }
 runExample();
-//# sourceMappingURL=exampleBosLevelColors.8ada771c.js.map
+//# sourceMappingURL=exampleBosLevelColors.ea7ccba2.js.map

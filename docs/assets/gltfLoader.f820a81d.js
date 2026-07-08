@@ -4,7 +4,7 @@ var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
   return value;
 };
-import { T as TrianglesDrawMode, a as TriangleFanDrawMode, b as TriangleStripDrawMode, L as Loader, c as LoaderUtils, F as FileLoader, C as Color, d as LinearSRGBColorSpace, S as SpotLight, P as PointLight, e as DirectionalLight, M as MeshBasicMaterial, f as SRGBColorSpace, h as MeshPhysicalMaterial, i as Vector2, j as Matrix4, k as Vector3, Q as Quaternion, I as InstancedMesh, m as InstancedBufferAttribute, O as Object3D, n as TextureLoader, o as ImageBitmapLoader, p as BufferAttribute, q as InterleavedBuffer, r as InterleavedBufferAttribute, s as LinearFilter, u as LinearMipmapLinearFilter, R as RepeatWrapping, N as NearestFilter, v as PointsMaterial, w as Material, x as LineBasicMaterial, y as MeshStandardMaterial, z as DoubleSide, A as PropertyBinding, E as BufferGeometry, G as SkinnedMesh, H as Mesh, J as LineSegments, U as Line, W as LineLoop, X as Points, Y as Group, Z as PerspectiveCamera, _ as MathUtils, $ as OrthographicCamera, a0 as Skeleton, a1 as AnimationClip, a2 as Bone, a3 as InterpolateLinear, a4 as ColorManagement, a5 as NearestMipmapNearestFilter, a6 as LinearMipmapNearestFilter, a7 as NearestMipmapLinearFilter, a8 as ClampToEdgeWrapping, a9 as MirroredRepeatWrapping, aa as InterpolateDiscrete, ab as FrontSide, ac as Texture, ad as VectorKeyframeTrack, ae as NumberKeyframeTrack, af as QuaternionKeyframeTrack, ag as Box3, ah as Sphere, ai as Interpolant } from "./viewer.02dcc5b2.js";
+import { T as TrianglesDrawMode, a as TriangleFanDrawMode, b as TriangleStripDrawMode, L as Loader, c as LoaderUtils, F as FileLoader, C as Color, d as LinearSRGBColorSpace, S as SpotLight, P as PointLight, e as DirectionalLight, M as MeshBasicMaterial, f as SRGBColorSpace, h as MeshPhysicalMaterial, i as Vector2, j as Matrix4, k as Vector3, Q as Quaternion, I as InstancedMesh, m as InstancedBufferAttribute, O as Object3D, n as TextureLoader, o as ImageBitmapLoader, p as BufferAttribute, q as InterleavedBuffer, r as InterleavedBufferAttribute, s as LinearFilter, u as LinearMipmapLinearFilter, R as RepeatWrapping, N as NearestFilter, v as PointsMaterial, w as Material, x as LineBasicMaterial, y as MeshStandardMaterial, z as DoubleSide, A as PropertyBinding, E as BufferGeometry, G as SkinnedMesh, H as Mesh, J as LineSegments, U as Line, W as LineLoop, X as Points, Y as Group, Z as PerspectiveCamera, _ as MathUtils, $ as OrthographicCamera, a0 as Skeleton, a1 as AnimationClip, a2 as Bone, a3 as InterpolateLinear, a4 as ColorManagement, a5 as NearestMipmapNearestFilter, a6 as LinearMipmapNearestFilter, a7 as NearestMipmapLinearFilter, a8 as ClampToEdgeWrapping, a9 as MirroredRepeatWrapping, aa as InterpolateDiscrete, ab as FrontSide, ac as Texture, ad as VectorKeyframeTrack, ae as NumberKeyframeTrack, af as QuaternionKeyframeTrack, ag as Box3, ah as Sphere, ai as Interpolant } from "./viewer.bb973d67.js";
 function toTrianglesDrawMode(geometry, drawMode) {
   if (drawMode === TrianglesDrawMode) {
     console.warn("THREE.BufferGeometryUtils.toTrianglesDrawMode(): Geometry already defined as triangles.");
@@ -2838,8 +2838,9 @@ class GltfLoader {
     return this.loadFromUrlOrZip(source);
   }
   async loadFromUrlOrZip(source) {
-    if (source.toLowerCase().endsWith(".zip"))
+    if (source.toLowerCase().endsWith(".zip")) {
       return this.loadFromZipUrl(source);
+    }
     return new Promise((resolve, reject) => {
       this.loader.load(
         source,
@@ -2866,4 +2867,4 @@ class GltfLoader {
 export {
   GltfLoader as G
 };
-//# sourceMappingURL=gltfLoader.2c6ff919.js.map
+//# sourceMappingURL=gltfLoader.f820a81d.js.map

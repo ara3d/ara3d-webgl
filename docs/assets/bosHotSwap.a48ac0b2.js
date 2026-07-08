@@ -10,4 +10,4 @@ function bindBosHotSwap(viewer, setModel) {
 export {
   bindBosHotSwap as b
 };
-//# sourceMappingURL=bosHotSwap.3875f6ba.js.map
+//# sourceMappingURL=bosHotSwap.a48ac0b2.js.map

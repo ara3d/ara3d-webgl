@@ -209,7 +209,7 @@ class DataTable {
   }
   ensureColumn(name) {
     const key = this.normalizeName(name);
-    let idx = this._colIndex.get(key);
+    const idx = this._colIndex.get(key);
     if (idx !== void 0)
       return idx;
     return this.addColumnInternal(name);
@@ -274,7 +274,10 @@ class DataTable {
   inferColumnType(colIndex, sampleRows) {
     const col = this._columns[colIndex];
     const n = Math.min(this._rowCount, sampleRows);
-    let sawNumber = false, sawBoolean = false, sawDate = false, sawOther = false;
+    let sawNumber = false;
+    let sawBoolean = false;
+    let sawDate = false;
+    let sawOther = false;
     for (let r = 0; r < n; r++) {
       const v = col[r];
       if (v === void 0 || v === null)
@@ -321,8 +324,9 @@ class DataTable {
     for (const v of values) {
       if (v != first) {
         if (isFirstNumber && Number.isFinite(v)) {
-          if (Math.abs(first - v) > 1e-3)
+          if (Math.abs(first - v) > 1e-3) {
             return false;
+          }
         } else {
           return false;
         }
@@ -338,4 +342,4 @@ class DataTable {
 export {
   DataTable as D
 };
-//# sourceMappingURL=DataTable.080f84a9.js.map
+//# sourceMappingURL=DataTable.e67c04b5.js.map

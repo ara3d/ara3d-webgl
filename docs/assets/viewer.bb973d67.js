@@ -34132,7 +34132,7 @@ const three_module = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.define
   setConsoleFunction
 }, Symbol.toStringTag, { value: "Module" }));
 var commonjsGlobal = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : {};
-var isMergeableObject = function isMergeableObject2(value) {
+var isMergeableObject$1 = function isMergeableObject(value) {
   return isNonNullObject(value) && !isSpecial(value);
 };
 function isNonNullObject(value) {
@@ -34205,7 +34205,7 @@ function mergeObject(target, source, options) {
 function deepmerge(target, source, options) {
   options = options || {};
   options.arrayMerge = options.arrayMerge || defaultArrayMerge;
-  options.isMergeableObject = options.isMergeableObject || isMergeableObject;
+  options.isMergeableObject = options.isMergeableObject || isMergeableObject$1;
   options.cloneUnlessOtherwiseSpecified = cloneUnlessOtherwiseSpecified;
   var sourceIsArray = Array.isArray(source);
   var targetIsArray = Array.isArray(target);
@@ -34295,8 +34295,24 @@ const defaultConfig = {
     autoAdd: true
   }
 };
+function isMergeableObject2(value) {
+  if (!value || typeof value !== "object")
+    return false;
+  if (value instanceof Color)
+    return false;
+  if (value instanceof Vector2)
+    return false;
+  if (value instanceof Vector3)
+    return false;
+  if (value instanceof Date)
+    return false;
+  if (value instanceof RegExp)
+    return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
 function getSettings(options) {
-  return options ? cjs(defaultConfig, options, void 0) : defaultConfig;
+  return options ? cjs(defaultConfig, options, { isMergeableObject: isMergeableObject2 }) : defaultConfig;
 }
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -45681,8 +45697,9 @@ function mergeGeometries(geometries) {
       srcPosArray.subarray(0, srcPosLength),
       dstPosOffset
     );
-    for (let j = 0; j < idxCount; j++)
+    for (let j = 0; j < idxCount; j++) {
       mergedIndices[indexOffset + j] = srcIndexArray[j] + vertexOffset;
+    }
     const triStart = indexOffset / 3;
     for (let triIdx = 0; triIdx < triCount; triIdx++) {
       triToInstanceIndex[triStart + triIdx] = i;
@@ -45698,8 +45715,9 @@ function mergeGeometries(geometries) {
 function groupInstances(instances) {
   const groups = /* @__PURE__ */ new Map();
   for (const inst of instances) {
-    if (!inst.visible)
+    if (!inst.visible) {
       continue;
+    }
     let matGroup = groups.get(inst.material);
     if (!matGroup) {
       matGroup = /* @__PURE__ */ new Map();
@@ -45717,7 +45735,7 @@ function groupInstances(instances) {
 function gatherSingleInstancesByMaterial(groups) {
   const r = new Array();
   for (const [material, meshGroups] of groups) {
-    let instances = [];
+    const instances = [];
     for (const [, group] of meshGroups) {
       if (group.length != 1)
         continue;
@@ -45734,8 +45752,9 @@ function createInstancedMeshes(instanceGroups) {
   for (const [material, meshGroups] of instanceGroups) {
     for (const [geometry, instances] of meshGroups) {
       const count = instances.length;
-      if (count <= 1)
+      if (count <= 1) {
         continue;
+      }
       const instanced = new InstancedMesh(geometry, material, count);
       instanced.instanceMatrix.setUsage(StaticDrawUsage);
       const instanceIndices = new Uint32Array(count);
@@ -45946,8 +45965,9 @@ class BimResolver {
     if (descType == 3)
       return this.Strings[rawVal];
     if (descType == 2) {
-      if (rawVal >= 0)
+      if (rawVal >= 0) {
         return this.GetEntityName(rawVal);
+      }
       return "";
     }
     return rawVal;
@@ -45956,17 +45976,17 @@ class BimResolver {
     if (!table || !table.Value || !table.Descriptor || !table.Entity)
       return;
     for (let i = 0; i < table.Value.length; i++) {
-      let descIndex = table.Descriptor[i];
-      let entityIndex = table.Entity[i];
-      let rawVal = table.Value[i];
+      const descIndex = table.Descriptor[i];
+      const entityIndex = table.Entity[i];
+      const rawVal = table.Value[i];
       if (descIndex < 0)
         continue;
-      let nameIndex = this.Descriptors.Name[descIndex];
-      let descType = this.Descriptors.Type[descIndex];
-      let Value = this.GetVal(rawVal, descType);
-      let Name = this.Strings[nameIndex];
-      let param = { Name, Value };
-      let tmp2 = this.ParameterMap.get(entityIndex);
+      const nameIndex = this.Descriptors.Name[descIndex];
+      const descType = this.Descriptors.Type[descIndex];
+      const Value = this.GetVal(rawVal, descType);
+      const Name = this.Strings[nameIndex];
+      const param = { Name, Value };
+      const tmp2 = this.ParameterMap.get(entityIndex);
       if (tmp2 === void 0) {
         this.ParameterMap.set(entityIndex, [param]);
       } else {
@@ -46044,9 +46064,10 @@ class BimResolver {
       yield i;
   }
   first(iterable, predicate, _default) {
-    for (const value of iterable)
+    for (const value of iterable) {
       if (predicate(value))
         return value;
+    }
     return _default;
   }
   FindDescriptor(name) {
@@ -46063,7 +46084,7 @@ class BimQuery {
     const r = /* @__PURE__ */ new Map();
     for (const i of this.Resolver.Data.Instances) {
       const s = f(i);
-      let list = r.get(s);
+      const list = r.get(s);
       if (!list)
         r.set(s, [i]);
       else
@@ -46084,7 +46105,7 @@ class BimQuery {
   GetLevelFromParameters(ps) {
     if (!ps)
       return null;
-    let p = ps.find((p2) => p2.Name == "Rvt:Element:Level");
+    const p = ps.find((p2) => p2.Name == "Rvt:Element:Level");
     if (!p)
       return "";
     return String(p.Value);
@@ -47255,4 +47276,4 @@ export {
   MeshStandardMaterial as y,
   DoubleSide as z
 };
-//# sourceMappingURL=viewer.02dcc5b2.js.map
+//# sourceMappingURL=viewer.bb973d67.js.map
