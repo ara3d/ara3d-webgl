@@ -128,8 +128,10 @@ export class BosFileDropHandler extends InputHandler {
       const bimData = await this._loader.loadFromFile(file, {
         loadParameters: this.settings.loadParameters
       })
-      this._viewer.removeContent()
-      this._viewer.add(bimData.ThreeGeometry)
+      if (this.settings.autoAdd) {
+        this._viewer.removeContent()
+        this._viewer.add(bimData.ThreeGeometry)
+      }
       this._onBosFileLoaded.dispatch(bimData)
     } catch (err) {
       const error =

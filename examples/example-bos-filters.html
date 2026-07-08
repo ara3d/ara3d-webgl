@@ -10,20 +10,18 @@
   <script type="module">
 import * as ARA3D from '../src/index';
 import { showFilter } from './filterPanel.js';
+import { bindBosHotSwap } from './bosHotSwap.js';
 import * as THREE from 'three';
 
 async function runExample() {
-    const viewer = new ARA3D.Viewer({ fileDrop: { enable: false } });
+    const viewer = new ARA3D.Viewer({
+        fileDrop: { enable: true, autoAdd: false },
+    });
     const loader = new ARA3D.BimOpenSchemaLoader();
-    console.time('Loading .bos file');
-    const bimData = await loader.load('/ara3d-webgl/Snowdon Towers Sample Architectural.bos');
-    console.timeEnd('Loading .bos file');
 
-    let group = bimData.ThreeGeometry;
-    viewer.add(group);
-
-    const catToInstances = bimData.Query.CategoryToInstances();
-
+    let bimData;
+    let group;
+    let catToInstances;
     let first = true;
 
     function updateVisible(map) {
@@ -64,13 +62,24 @@ async function runExample() {
         viewer.add(group);
     }
 
-    console.time("Creating filter");
-    showFilter(
-        'Category',
-        catToInstances,
-       (keys, map) => updateVisible(map)
-    );
-    console.timeEnd("Creating filter");
+    function setModel(data, isInitial = false) {
+        bimData = data;
+        catToInstances = bimData.Query.CategoryToInstances();
+        group = bimData.ThreeGeometry;
+        viewer.add(group);
+        first = isInitial;
+        showFilter(
+            'Category',
+            catToInstances,
+            (keys, map) => updateVisible(map)
+        );
+    }
+
+    bindBosHotSwap(viewer, setModel);
+
+    console.time('Loading .bos file');
+    setModel(await loader.load('/ara3d-webgl/Snowdon Towers Sample Architectural.bos'), true);
+    console.timeEnd('Loading .bos file');
 }
 
 runExample();

@@ -1,6 +1,6 @@
-import { StringIndex, EntityIndex } from './bimData';
+import { StringIndex, EntityIndex } from './bimData'
 
-// Data specific to the entities table 
+// Data specific to the entities table
 
 export interface BimEntities {
     LocalId: Array<number>;

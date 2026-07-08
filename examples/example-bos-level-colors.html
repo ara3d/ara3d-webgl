@@ -67,6 +67,7 @@
   <script type="module">
     import * as ARA3D from '../src/index';
     import * as THREE from 'three';
+    import { bindBosHotSwap } from './bosHotSwap.js';
 
     // ---------- State ----------
     const paletteState = {
@@ -217,23 +218,28 @@
       });
     }
 
+    function setModel(data) {
+      bimData = data;
+      levelToInstances = bimData.Query.LevelToInstances();
+      rebuildSceneGeometry();
+    }
+
     // ---------- Main ----------
     async function runExample() {
-      viewer = new ARA3D.Viewer({ fileDrop: { enable: false } });
+      viewer = new ARA3D.Viewer({
+        fileDrop: { enable: true, autoAdd: false, loadParameters: true },
+      });
       const loader = new ARA3D.BimOpenSchemaLoader();
 
-      console.time('Loading .bos file');
-      bimData = await loader.load('/ara3d-webgl/Snowdon Towers Sample Architectural.bos', { loadParameters: true });
-      console.timeEnd('Loading .bos file');
-
-      levelToInstances = bimData.Query.LevelToInstances();
-
-      // UI
       syncUI();
       bindUI();
+      bindBosHotSwap(viewer, setModel);
 
-      // Initial build
-      rebuildSceneGeometry();
+      console.time('Loading .bos file');
+      const data = await loader.load('/ara3d-webgl/Snowdon Towers Sample Architectural.bos', { loadParameters: true });
+      console.timeEnd('Loading .bos file');
+
+      setModel(data);
     }
 
     runExample();
