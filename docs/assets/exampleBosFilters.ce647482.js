@@ -1,5 +1,5 @@
-import { V as Viewer, B as BimOpenSchemaLoader, y as MeshStandardMaterial } from "./viewer.02dcc5b2.js";
-import { b as bindBosHotSwap } from "./bosHotSwap.3875f6ba.js";
+import { V as Viewer, B as BimOpenSchemaLoader, y as MeshStandardMaterial } from "./viewer.bb973d67.js";
+import { b as bindBosHotSwap } from "./bosHotSwap.a48ac0b2.js";
 function showFilter(name, filter, onChange) {
   if (!name || !filter) {
     const existing = document.getElementById("ara3d-filter-panel");
@@ -385,4 +385,4 @@ async function runExample() {
   console.timeEnd("Loading .bos file");
 }
 runExample();
-//# sourceMappingURL=exampleBosFilters.bd0220ab.js.map
+//# sourceMappingURL=exampleBosFilters.ce647482.js.map

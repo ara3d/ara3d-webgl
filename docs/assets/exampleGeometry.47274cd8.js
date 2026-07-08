@@ -1,4 +1,4 @@
-import { V as Viewer, aj as SphereGeometry, ak as IcosahedronGeometry, al as OctahedronGeometry, am as TetrahedronGeometry, an as PlaneGeometry, ao as BoxGeometry, ap as CircleGeometry, aq as RingGeometry, ar as CylinderGeometry, as as ConeGeometry, at as TorusGeometry, au as TorusKnotGeometry, y as MeshStandardMaterial, C as Color, H as Mesh } from "./viewer.02dcc5b2.js";
+import { V as Viewer, aj as SphereGeometry, ak as IcosahedronGeometry, al as OctahedronGeometry, am as TetrahedronGeometry, an as PlaneGeometry, ao as BoxGeometry, ap as CircleGeometry, aq as RingGeometry, ar as CylinderGeometry, as as ConeGeometry, at as TorusGeometry, au as TorusKnotGeometry, y as MeshStandardMaterial, C as Color, H as Mesh } from "./viewer.bb973d67.js";
 async function runExample() {
   const viewer = new Viewer();
   const geometries = [
@@ -41,4 +41,4 @@ async function runExample() {
   }
 }
 runExample();
-//# sourceMappingURL=exampleGeometry.c7708464.js.map
+//# sourceMappingURL=exampleGeometry.47274cd8.js.map

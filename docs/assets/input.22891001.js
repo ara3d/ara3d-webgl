@@ -4,9 +4,9 @@ var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
   return value;
 };
-import { t as three_module, D as DefaultInputScheme, K as KEYS, V as Viewer, g as getSettings, B as BimOpenSchemaLoader, l as loadBimGeometryFromZip } from "./viewer.02dcc5b2.js";
-import { G as GltfLoader } from "./gltfLoader.2c6ff919.js";
-import { D as DataTable } from "./DataTable.080f84a9.js";
+import { t as three_module, D as DefaultInputScheme, K as KEYS, V as Viewer, g as getSettings, B as BimOpenSchemaLoader, l as loadBimGeometryFromZip } from "./viewer.bb973d67.js";
+import { G as GltfLoader } from "./gltfLoader.f820a81d.js";
+import { D as DataTable } from "./DataTable.e67c04b5.js";
 class GizmoOptions {
   constructor(init) {
     __publicField(this, "size", 84);
@@ -57,4 +57,4 @@ const ARA3D = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePropert
   DataTable
 }, Symbol.toStringTag, { value: "Module" }));
 console.log(ARA3D);
-//# sourceMappingURL=input.9e0bd90c.js.map
+//# sourceMappingURL=input.22891001.js.map
