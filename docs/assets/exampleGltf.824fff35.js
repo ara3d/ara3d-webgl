@@ -1,5 +1,6 @@
-import { V as Viewer } from "./viewer.bb973d67.js";
-import { G as GltfLoader } from "./gltfLoader.f820a81d.js";
+import "./bimOpenSchemaLoader.1c0420b7.js";
+import { V as Viewer } from "./viewer.eec8521c.js";
+import { G as GltfLoader } from "./gltfLoader.c3a36e8a.js";
 async function runExample() {
   const viewer = new Viewer();
   const loader = new GltfLoader();
@@ -14,4 +15,4 @@ async function runExample() {
   console.log("Completed");
 }
 runExample();
-//# sourceMappingURL=exampleGltf.cc7c8637.js.map
+//# sourceMappingURL=exampleGltf.824fff35.js.map

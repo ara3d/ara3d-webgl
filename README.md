@@ -28,6 +28,45 @@ We've tried to keep the code as straightforward and legible as possible:
 - The BIM Geometry type definition: [`bimGeometry.ts`](https://github.com/ara3d/ara3d-webgl/blob/main/src/loader/bimGeometry.ts)
 - The conversion to Three.JS geometry: [`buildGeometryGroup.ts`](https://github.com/ara3d/ara3d-webgl/blob/main/src/loader/buildGeometryGroup.ts)
 
+## WebGPU Viewer (multiDrawIndexedIndirect)
+
+Alongside the Three.js viewer there is a second loader and renderer, in
+[`src/gpu`](https://github.com/ara3d/ara3d-webgl/tree/main/src/gpu), that draws
+a whole model with Chromium's experimental
+[`multiDrawIndexedIndirect`](https://chromestatus.com/feature/5121353697788928)
+WebGPU extension.
+
+It works differently from the Three.js path:
+
+- The BOS vertex columns are uploaded to the GPU unchanged, as three `sint32`
+  vertex buffers. No `BufferGeometry` objects and no float conversion.
+- Every visible instance becomes one indirect draw command, and every transform
+  and color lives in one storage buffer. Nothing is merged and nothing is
+  batched by material.
+- One `multiDrawIndexedIndirect` call per pass draws the model.
+
+The demo is `examples/example-webgpu-multidraw.html`. It shows the adapter,
+whether the extension is present, the draw and triangle counts, and a frame
+timer. A checkbox switches between the multi-draw call and one
+`drawIndexedIndirect` per instance, which is the same buffers with more CPU work.
+
+The extension is behind a flag. Launch the browser with:
+
+```bash
+chrome --enable-unsafe-webgpu --enable-dawn-features=multi_draw_indirect
+```
+
+Without the flag the demo still runs on the fallback path and says so. The
+`indirect-first-instance` WebGPU feature is required either way.
+
+Measured on an Intel Xe-LPG integrated GPU with the Snowdon Towers sample
+(29,666 instances, 6.2M triangles, 1384x749):
+
+| Mode | FPS | CPU ms per frame |
+| --- | --- | --- |
+| `multiDrawIndexedIndirect` | 124 | 0.19 |
+| `drawIndexedIndirect` per instance | 58 | 1.26 |
+
 ## Building and Running 
 
 The project uses [vite](https://vite.dev/) for bundling and development. 

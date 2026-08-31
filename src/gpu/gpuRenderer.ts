@@ -194,6 +194,8 @@ export class GpuRenderer {
     const offset = range.first * stride
 
     if (this.useMultiDraw && this.ctx.multiDraw) {
+      // TODO: cull instances in a compute pass, write the survivors into a
+      // second indirect buffer, and pass its counter as the drawCountBuffer.
       pass.multiDrawIndexedIndirect(indirect, offset, range.count)
       return
     }

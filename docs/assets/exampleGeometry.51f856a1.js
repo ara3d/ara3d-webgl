@@ -1,4 +1,5 @@
-import { V as Viewer, aj as SphereGeometry, ak as IcosahedronGeometry, al as OctahedronGeometry, am as TetrahedronGeometry, an as PlaneGeometry, ao as BoxGeometry, ap as CircleGeometry, aq as RingGeometry, ar as CylinderGeometry, as as ConeGeometry, at as TorusGeometry, au as TorusKnotGeometry, y as MeshStandardMaterial, C as Color, H as Mesh } from "./viewer.bb973d67.js";
+import { fk as SphereGeometry, dD as IcosahedronGeometry, eJ as OctahedronGeometry, fB as TetrahedronGeometry, bI as PlaneGeometry, f as BoxGeometry, cQ as CircleGeometry, f8 as RingGeometry, d5 as CylinderGeometry, cX as ConeGeometry, fG as TorusGeometry, fH as TorusKnotGeometry, ew as MeshStandardMaterial, C as Color, d as Mesh } from "./bimOpenSchemaLoader.1c0420b7.js";
+import { V as Viewer } from "./viewer.eec8521c.js";
 async function runExample() {
   const viewer = new Viewer();
   const geometries = [
@@ -41,4 +42,4 @@ async function runExample() {
   }
 }
 runExample();
-//# sourceMappingURL=exampleGeometry.47274cd8.js.map
+//# sourceMappingURL=exampleGeometry.51f856a1.js.map
