@@ -11,4 +11,11 @@ module.exports = {
   },
   plugins: ['@typescript-eslint'],
   rules: {},
+  overrides: [
+    {
+      // TypeScript already resolves globals such as the WebGPU types.
+      files: ['*.ts'],
+      rules: { 'no-undef': 'off' },
+    },
+  ],
 }

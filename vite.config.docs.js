@@ -20,6 +20,7 @@ export default defineConfig({
                 exampleBosLevelColors: resolve(__dirname, 'examples/example-bos-level-colors.html'),
                 exampleBosSelection: resolve(__dirname, 'examples/example-bos-selection.html'),
                 exampleBos: resolve(__dirname, 'examples/example-bos.html'),
+                exampleWebGpuMultiDraw: resolve(__dirname, 'examples/example-webgpu-multidraw.html'),
             },
         },
     },

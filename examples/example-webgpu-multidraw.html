@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>WebGPU multiDrawIndexedIndirect</title>
+</head>
+<body>
+<script type="module">
+import { BosGpuLoader, GpuViewer, isWebGpuAvailable, MULTI_DRAW_HELP } from '../src/gpu/index'
+import { createGpuPanel, showStats } from './gpuPanel.js'
+
+const MODEL = '/ara3d-webgl/Snowdon Towers Sample Architectural.bos'
+
+async function run () {
+  const panel = createGpuPanel()
+
+  if (!isWebGpuAvailable()) {
+    panel.setNote('WebGPU is not available in this browser. Use Chrome or Edge 113+.', true)
+    return
+  }
+
+  let viewer
+  try {
+    viewer = await GpuViewer.create(panel.canvas)
+  } catch (e) {
+    panel.setNote(String(e.message ?? e), true)
+    return
+  }
+
+  const multiDraw = viewer.context.multiDraw
+  panel.set('adapter', viewer.context.adapterInfo)
+  panel.set('status', multiDraw ? 'supported' : 'not available')
+  panel.setNote(
+    multiDraw
+      ? 'One call per pass draws the whole model. Untick to compare against one drawIndexedIndirect per instance.'
+      : 'Falling back to one drawIndexedIndirect per instance. ' + MULTI_DRAW_HELP,
+    !multiDraw)
+
+  panel.toggle.disabled = !multiDraw
+  panel.toggle.checked = multiDraw
+  panel.toggle.addEventListener('change', () => {
+    viewer.renderer.useMultiDraw = panel.toggle.checked
+    panel.set('status', panel.toggle.checked ? 'multiDrawIndexedIndirect' : 'drawIndexedIndirect loop')
+  })
+
+  viewer.onFrame = (stats) => showStats(panel, stats)
+  viewer.start()
+
+  panel.setNote('Loading model...')
+  const loader = new BosGpuLoader()
+  console.time('Loading .bos file')
+  const model = await loader.load(MODEL)
+  console.timeEnd('Loading .bos file')
+
+  viewer.setScene(model.scene)
+  window.gpuDemo = { viewer, model, panel }
+  panel.setNote(
+    multiDraw
+      ? 'Drag to orbit, right drag to pan, wheel to zoom. Drop a .bos file to load your own.'
+      : 'Multi-draw unavailable. ' + MULTI_DRAW_HELP)
+
+  enableFileDrop(panel, viewer, loader)
+}
+
+function enableFileDrop (panel, viewer, loader) {
+  const stop = (e) => { e.preventDefault(); e.stopPropagation() }
+  window.addEventListener('dragover', stop)
+  window.addEventListener('drop', async (e) => {
+    stop(e)
+    const file = [...(e.dataTransfer?.files ?? [])].find((f) => f.name.toLowerCase().endsWith('.bos'))
+    if (!file) return
+    panel.setNote('Loading ' + file.name + '...')
+    try {
+      const model = await loader.loadFromFile(file)
+      viewer.setScene(model.scene)
+      panel.setNote('Loaded ' + file.name)
+    } catch (err) {
+      panel.setNote('Failed to load ' + file.name + ': ' + err, true)
+    }
+  })
+}
+
+run()
+</script>
+</body>
+</html>
