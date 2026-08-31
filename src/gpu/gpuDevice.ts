@@ -44,7 +44,14 @@ export async function requestGpuContext (): Promise<GpuContext> {
   const requiredFeatures = [FIRST_INSTANCE_FEATURE]
   if (multiDraw) requiredFeatures.push(MULTI_DRAW_FEATURE)
 
-  const device = await adapter.requestDevice({ requiredFeatures })
+  // Default limits cap buffers at 256 MiB; large models need more for
+  // vertex and index buffers, so ask for whatever the adapter offers.
+  const requiredLimits = {
+    maxBufferSize: adapter.limits.maxBufferSize,
+    maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize
+  }
+
+  const device = await adapter.requestDevice({ requiredFeatures, requiredLimits })
   device.addEventListener('uncapturederror', (e: any) => console.error('WebGPU:', e.error?.message))
 
   const lost = device.lost.then((info) => {
