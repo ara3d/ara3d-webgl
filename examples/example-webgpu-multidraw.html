@@ -9,7 +9,11 @@
 import { BosGpuLoader, GpuViewer, isWebGpuAvailable, MULTI_DRAW_HELP } from '../src/gpu/index'
 import { createGpuPanel, showStats } from './gpuPanel.js'
 
-const MODEL = '/ara3d-webgl/Snowdon Towers Sample Architectural.bos'
+const DEFAULT_MODEL = 'Snowdon Towers Sample Architectural.bos'
+
+// Pass ?model=stadium.bos to load one of the other bundled samples.
+const MODEL = '/ara3d-webgl/' +
+  (new URLSearchParams(location.search).get('model') ?? DEFAULT_MODEL)
 
 async function run () {
   const panel = createGpuPanel()
@@ -43,7 +47,16 @@ async function run () {
     panel.set('status', panel.toggle.checked ? 'multiDrawIndexedIndirect' : 'drawIndexedIndirect loop')
   })
 
+  panel.cullToggle.disabled = !multiDraw
+  panel.cullToggle.addEventListener('change', () => {
+    viewer.renderer.culling = panel.cullToggle.checked
+  })
+
   viewer.onFrame = (stats) => showStats(panel, stats)
+  viewer.onStopped = (reason) => panel.setNote(reason, true)
+  // Browsers stop animation frames while the page is hidden; say so instead of
+  // leaving the last frame rate on screen looking live.
+  viewer.onStalled = (reason) => panel.set('fps', reason ? 'paused' : '-')
   viewer.start()
 
   panel.setNote('Loading model...')

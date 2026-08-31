@@ -4,6 +4,7 @@ import { GpuContext } from './gpuDevice'
 import { createBuffer } from './gpuBuffers'
 import { sceneShader } from './shaders/sceneShader'
 import { DRAW_COMMAND_WORDS, DrawRange, GpuScene, drawCount } from './gpuScene'
+import { GpuCuller, OPAQUE_COUNT_OFFSET, TRANSPARENT_COUNT_OFFSET } from './gpuCuller'
 
 const CAMERA_BYTES = 96 // mat4 + eye vec4 + params vec4
 const SAMPLE_COUNT = 4
@@ -17,6 +18,7 @@ type SceneResources = {
     instances: GPUBuffer;
     indirect: GPUBuffer;
     bindGroup: GPUBindGroup;
+    culler: GpuCuller;
 }
 
 /**
@@ -45,6 +47,13 @@ export class GpuRenderer {
 
   /** Set false to compare against the one-call-per-draw path. */
   useMultiDraw: boolean
+
+  /**
+   * Optional GPU frustum culling. Off by default: it only pays off on models
+   * where much of the scene is off screen, and it needs the multi-draw
+   * extension, because the surviving draw count stays on the GPU.
+   */
+  culling = false
 
   constructor (canvas: HTMLCanvasElement, ctx: GpuContext) {
     this.canvas = canvas
@@ -139,13 +148,30 @@ export class GpuRenderer {
       ]
     })
 
-    this.resources = { scene, vertexX, vertexY, vertexZ, indices, instances, indirect, bindGroup }
+    const culler = new GpuCuller(device, scene, indirect)
+
+    this.resources = {
+      scene, vertexX, vertexY, vertexZ, indices, instances, indirect, bindGroup, culler
+    }
     console.timeEnd('Uploading GPU buffers')
   }
 
   /** Number of draw commands in the current scene. */
   get drawCount (): number {
     return this.resources ? drawCount(this.resources.scene) : 0
+  }
+
+  /** True when culling is both requested and usable. */
+  get cullingActive (): boolean {
+    return this.culling && this.useMultiDraw && this.ctx.multiDraw
+  }
+
+  /** Commands that survived the last cull pass, or the whole scene when culling is off. */
+  get drawnCount (): number {
+    if (!this.resources) return 0
+    if (!this.cullingActive) return this.drawCount
+    const [opaque, transparent] = this.resources.culler.drawnCounts
+    return opaque + transparent
   }
 
   render (viewProj: THREE.Matrix4, eye: THREE.Vector3) {
@@ -156,6 +182,9 @@ export class GpuRenderer {
     this.updateCamera(viewProj, eye, r.scene.vertexScale)
 
     const encoder = this.ctx.device.createCommandEncoder()
+    const culler = this.cullingActive ? r.culler : undefined
+    culler?.cull(encoder, viewProj)
+
     const pass = encoder.beginRenderPass({
       colorAttachments: [{
         view: this.color.createView(),
@@ -178,25 +207,34 @@ export class GpuRenderer {
     pass.setVertexBuffer(2, r.vertexZ)
     pass.setIndexBuffer(r.indices, 'uint32')
 
+    const indirect = culler ? culler.visible : r.indirect
+
     pass.setPipeline(this.opaquePipeline)
-    this.drawRange(pass, r.indirect, r.scene.opaque)
+    this.drawRange(pass, indirect, r.scene.opaque, culler?.counts, OPAQUE_COUNT_OFFSET)
 
     pass.setPipeline(this.transparentPipeline)
-    this.drawRange(pass, r.indirect, r.scene.transparent)
+    this.drawRange(pass, indirect, r.scene.transparent, culler?.counts, TRANSPARENT_COUNT_OFFSET)
 
     pass.end()
     this.ctx.device.queue.submit([encoder.finish()])
+    culler?.pollCounts()
   }
 
-  private drawRange (pass: GPURenderPassEncoder, indirect: GPUBuffer, range: DrawRange) {
+  private drawRange (
+    pass: GPURenderPassEncoder,
+    indirect: GPUBuffer,
+    range: DrawRange,
+    counts: GPUBuffer | undefined,
+    countOffset: number
+  ) {
     if (range.count === 0) return
     const stride = DRAW_COMMAND_WORDS * 4
     const offset = range.first * stride
 
     if (this.useMultiDraw && this.ctx.multiDraw) {
-      // TODO: cull instances in a compute pass, write the survivors into a
-      // second indirect buffer, and pass its counter as the drawCountBuffer.
-      pass.multiDrawIndexedIndirect(indirect, offset, range.count)
+      // With a draw count buffer the CPU never learns how many instances the
+      // cull pass kept; the GPU reads the counter written moments earlier.
+      pass.multiDrawIndexedIndirect(indirect, offset, range.count, counts, countOffset)
       return
     }
 
@@ -247,6 +285,7 @@ export class GpuRenderer {
   private releaseScene () {
     const r = this.resources
     if (!r) return
+    r.culler.dispose()
     for (const b of [r.vertexX, r.vertexY, r.vertexZ, r.indices, r.instances, r.indirect]) {
       b.destroy()
     }

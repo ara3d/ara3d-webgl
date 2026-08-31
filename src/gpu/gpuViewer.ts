@@ -11,15 +11,30 @@ export type FrameStats = {
     /** Milliseconds spent inside the render call on the CPU. */
     cpuMs: number;
     drawCommands: number;
+    /** Commands actually submitted, which is lower than drawCommands when culling. */
+    drawnCommands: number;
     triangles: number;
     multiDraw: boolean;
+    culling: boolean;
 }
+
+const stallReason = (idleMs: number) =>
+  document.hidden
+    ? 'paused: page is not visible'
+    : `paused: no frames for ${(idleMs / 1000).toFixed(1)}s`
+
+const WATCHDOG_INTERVAL_MS = 1000
+const STALL_MS = 2000
 
 /** Ties a canvas, an orbit camera and the indirect renderer into a render loop. */
 export class GpuViewer {
   readonly renderer: GpuRenderer
   readonly camera = new OrbitCamera()
   onFrame: ((stats: FrameStats) => void) | undefined
+  /** Called once if rendering stops, with the reason. */
+  onStopped: ((reason: string) => void) | undefined
+  /** Called when frames stop arriving, and again with undefined when they resume. */
+  onStalled: ((reason: string | undefined) => void) | undefined
 
   private readonly detachInput: () => void
   private running = false
@@ -27,10 +42,22 @@ export class GpuViewer {
   private frameStart = 0
   private cpuMs = 0
   private triangles = 0
+  private lastFrameAt = 0
+  private stalled = false
+  private watchdog: ReturnType<typeof setInterval> | undefined
 
   private constructor (canvas: HTMLCanvasElement, ctx: GpuContext) {
     this.renderer = new GpuRenderer(canvas, ctx)
     this.detachInput = attachOrbitInput(canvas, this.camera)
+    ctx.lost.then((info) => this.fail(`WebGPU device lost (${info.reason}): ${info.message}`))
+  }
+
+  /** Stops the loop and reports why, so a dead device is not a silent freeze. */
+  private fail (reason: string) {
+    if (!this.running) return
+    this.running = false
+    console.error(reason)
+    this.onStopped?.(reason)
   }
 
   static async create (canvas: HTMLCanvasElement): Promise<GpuViewer> {
@@ -52,10 +79,29 @@ export class GpuViewer {
     if (this.running) return
     this.running = true
     this.frameStart = performance.now()
+    this.lastFrameAt = performance.now()
+    this.watchdog = setInterval(this.checkStalled, WATCHDOG_INTERVAL_MS)
     requestAnimationFrame(this.loop)
   }
 
-  stop () { this.running = false }
+  stop () {
+    this.running = false
+    clearInterval(this.watchdog)
+    this.watchdog = undefined
+  }
+
+  /**
+   * Browsers stop calling requestAnimationFrame while a window or tab is not
+   * visible, which leaves the last frame statistics on screen looking live.
+   * This reports the gap so a paused viewer is not mistaken for a slow one.
+   */
+  private readonly checkStalled = () => {
+    const idle = performance.now() - this.lastFrameAt
+    const stalled = this.running && idle > STALL_MS
+    if (stalled === this.stalled) return
+    this.stalled = stalled
+    this.onStalled?.(stalled ? stallReason(idle) : undefined)
+  }
 
   dispose () {
     this.stop()
@@ -68,9 +114,15 @@ export class GpuViewer {
 
     this.camera.setAspect(this.renderer.aspect || 1)
     const t0 = performance.now()
-    this.renderer.render(this.camera.viewProjection, this.camera.eye)
+    try {
+      this.renderer.render(this.camera.viewProjection, this.camera.eye)
+    } catch (e) {
+      this.fail('Rendering stopped: ' + ((e as Error).message ?? e))
+      return
+    }
     this.cpuMs += performance.now() - t0
     this.frames++
+    this.lastFrameAt = performance.now()
 
     const elapsed = performance.now() - this.frameStart
     if (elapsed > 500 && this.onFrame) {
@@ -78,8 +130,10 @@ export class GpuViewer {
         fps: (this.frames * 1000) / elapsed,
         cpuMs: this.cpuMs / this.frames,
         drawCommands: this.renderer.drawCount,
+        drawnCommands: this.renderer.drawnCount,
         triangles: this.triangles,
-        multiDraw: this.renderer.useMultiDraw && this.context.multiDraw
+        multiDraw: this.renderer.useMultiDraw && this.context.multiDraw,
+        culling: this.renderer.cullingActive
       })
       this.frames = 0
       this.cpuMs = 0

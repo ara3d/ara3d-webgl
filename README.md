@@ -50,6 +50,25 @@ whether the extension is present, the draw and triangle counts, and a frame
 timer. A checkbox switches between the multi-draw call and one
 `drawIndexedIndirect` per instance, which is the same buffers with more CPU work.
 
+### Optional GPU frustum culling
+
+Culling is off by default and switched on with a checkbox in the demo, or
+`renderer.culling = true`. When it is on, a compute pass tests each instance's
+world space bounding sphere against the six frustum planes and appends the
+survivors' commands to a second indirect buffer. The atomic counter it writes
+is handed to `multiDrawIndexedIndirect` as its draw count buffer, so the CPU
+never learns how many instances were visible and does no per-frame work that
+scales with the model.
+
+This needs the multi-draw extension. The fallback path has to know the number
+of draws on the CPU to issue them, so it always draws everything.
+
+How much it helps depends entirely on how much of the model is off screen. With
+the stadium sample framed so the whole building is visible, nothing is outside
+the frustum and all 226,964 commands are still submitted. Moving the camera
+inside the bowl leaves about 36,500 of them, and the viewer runs at 85 FPS
+there.
+
 The extension is behind a flag. Launch the browser with:
 
 ```bash
@@ -66,6 +85,14 @@ Measured on an Intel Xe-LPG integrated GPU with the Snowdon Towers sample
 | --- | --- | --- |
 | `multiDrawIndexedIndirect` | 124 | 0.19 |
 | `drawIndexedIndirect` per instance | 58 | 1.26 |
+
+And with the much larger stadium sample (226,964 instances, 56.5M triangles),
+framed so the whole model is visible:
+
+| Mode | FPS | CPU ms per frame |
+| --- | --- | --- |
+| `multiDrawIndexedIndirect` | 19 | 0.19 |
+| `drawIndexedIndirect` per instance | 5.8 | 34.0 |
 
 ## Building and Running 
 

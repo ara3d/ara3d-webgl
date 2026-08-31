@@ -17,6 +17,8 @@ export type GpuContext = {
     multiDraw: boolean;
     /** Human readable description of the adapter. */
     adapterInfo: string;
+    /** Resolves if the device is ever lost, which silently stops all rendering. */
+    lost: Promise<GPUDeviceLostInfo>;
 }
 
 export function isWebGpuAvailable (): boolean {
@@ -45,7 +47,12 @@ export async function requestGpuContext (): Promise<GpuContext> {
   const device = await adapter.requestDevice({ requiredFeatures })
   device.addEventListener('uncapturederror', (e: any) => console.error('WebGPU:', e.error?.message))
 
-  return { adapter, device, multiDraw, adapterInfo: describeAdapter(adapter) }
+  const lost = device.lost.then((info) => {
+    console.error('WebGPU device lost:', info.reason, info.message)
+    return info
+  })
+
+  return { adapter, device, multiDraw, adapterInfo: describeAdapter(adapter), lost }
 }
 
 function describeAdapter (adapter: GPUAdapter): string {

@@ -21,6 +21,7 @@ const ROWS = [
   ['adapter', 'Adapter'],
   ['status', 'Multi-draw'],
   ['draws', 'Draw commands'],
+  ['drawn', 'Submitted'],
   ['tris', 'Triangles'],
   ['fps', 'FPS'],
   ['cpu', 'CPU ms / frame']
@@ -48,7 +49,9 @@ export function createGpuPanel () {
       `<div class="gpu-row"><span>${label}</span><span id="gpu-${id}">-</span></div>`).join('') +
     '<div class="gpu-note" id="gpu-note">Starting up...</div>' +
     '<label class="gpu-toggle"><input type="checkbox" id="gpu-multi" checked disabled>' +
-    'Use multiDrawIndexedIndirect</label>'
+    'Use multiDrawIndexedIndirect</label>' +
+    '<label class="gpu-toggle"><input type="checkbox" id="gpu-cull" disabled>' +
+    'GPU frustum culling</label>'
   page.appendChild(panel)
 
   document.body.appendChild(page)
@@ -56,10 +59,12 @@ export function createGpuPanel () {
   const cell = (id) => document.getElementById('gpu-' + id)
   const note = cell('note')
   const toggle = cell('multi')
+  const cullToggle = cell('cull')
 
   return {
     canvas,
     toggle,
+    cullToggle,
     set (id, value) { cell(id).textContent = value },
     setNote (text, bad = false) {
       note.textContent = text
@@ -75,6 +80,7 @@ export function showStats (panel, stats) {
   panel.set('fps', stats.fps.toFixed(1))
   panel.set('cpu', stats.cpuMs.toFixed(2))
   panel.set('draws', fmt(stats.drawCommands))
+  panel.set('drawn', stats.culling ? fmt(stats.drawnCommands) : 'all')
   panel.set('tris', fmt(Math.round(stats.triangles)))
 }
 

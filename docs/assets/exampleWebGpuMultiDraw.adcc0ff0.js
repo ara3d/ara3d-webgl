@@ -4,7 +4,7 @@ var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
   return value;
 };
-import { r as Matrix4, a as Vector3, eX as Quaternion, g3 as JSZip, l as loadBimGeometryFromZip, P as PerspectiveCamera, fX as WebGPUCoordinateSystem } from "./bimOpenSchemaLoader.1c0420b7.js";
+import { r as Matrix4, a as Vector3, eX as Quaternion, g3 as JSZip, l as loadBimGeometryFromZip, F as Frustum, fX as WebGPUCoordinateSystem, P as PerspectiveCamera } from "./bimOpenSchemaLoader.1c0420b7.js";
 const MULTI_DRAW_FEATURE = "chromium-experimental-multi-draw-indirect";
 const FIRST_INSTANCE_FEATURE = "indirect-first-instance";
 function isWebGpuAvailable() {
@@ -29,7 +29,11 @@ async function requestGpuContext() {
     requiredFeatures.push(MULTI_DRAW_FEATURE);
   const device = await adapter.requestDevice({ requiredFeatures });
   device.addEventListener("uncapturederror", (e) => console.error("WebGPU:", e.error?.message));
-  return { adapter, device, multiDraw, adapterInfo: describeAdapter(adapter) };
+  const lost = device.lost.then((info) => {
+    console.error("WebGPU device lost:", info.reason, info.message);
+    return info;
+  });
+  return { adapter, device, multiDraw, adapterInfo: describeAdapter(adapter), lost };
 }
 function describeAdapter(adapter) {
   const info = adapter.info;
@@ -102,7 +106,7 @@ function buildGpuScene(bg) {
   const instanceSpheres = new Float32Array(n * 4);
   const instanceIds = new Uint32Array(n);
   const drawCommands = new Uint32Array(n * DRAW_COMMAND_WORDS);
-  const matrix = new Matrix4();
+  const matrix2 = new Matrix4();
   const position = new Vector3();
   const quaternion = new Quaternion();
   const scale = new Vector3();
@@ -122,14 +126,14 @@ function buildGpuScene(bg) {
     position.set(bg.TransformTX[t], bg.TransformTY[t], bg.TransformTZ[t]);
     quaternion.set(bg.TransformQX[t], bg.TransformQY[t], bg.TransformQZ[t], bg.TransformQW[t]);
     scale.set(bg.TransformSX[t], bg.TransformSY[t], bg.TransformSZ[t]);
-    matrix.compose(position, quaternion, scale);
+    matrix2.compose(position, quaternion, scale);
     const base = slot * INSTANCE_FLOATS;
-    instanceData.set(matrix.elements, base);
+    instanceData.set(matrix2.elements, base);
     instanceData[base + 16] = bg.MaterialRed[mat] / 255;
     instanceData[base + 17] = bg.MaterialGreen[mat] / 255;
     instanceData[base + 18] = bg.MaterialBlue[mat] / 255;
     instanceData[base + 19] = bg.MaterialAlpha[mat] / 255;
-    center.set(meshSpheres[mesh * 4], meshSpheres[mesh * 4 + 1], meshSpheres[mesh * 4 + 2]).applyMatrix4(matrix);
+    center.set(meshSpheres[mesh * 4], meshSpheres[mesh * 4 + 1], meshSpheres[mesh * 4 + 2]).applyMatrix4(matrix2);
     const radius = meshSpheres[mesh * 4 + 3] * maxAbs(scale);
     instanceSpheres[slot * 4 + 0] = center.x;
     instanceSpheres[slot * 4 + 1] = center.y;
@@ -228,7 +232,159 @@ function createBuffer(device, data, usage, label) {
   device.queue.writeBuffer(buffer, 0, data.buffer, data.byteOffset, data.byteLength);
   return buffer;
 }
+const createEmptyBuffer = (device, size, usage, label) => device.createBuffer({ label, size: align4(size), usage });
 const align4 = (n) => n + 3 & ~3;
+const cullShader = `
+struct Cull {
+  planes : array<vec4<f32>, 6>,
+  info   : vec4<u32>,   // x: instance count, y: first transparent instance
+};
+
+@group(0) @binding(0) var<uniform> cull : Cull;
+@group(0) @binding(1) var<storage, read> spheres : array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read> source : array<u32>;
+@group(0) @binding(3) var<storage, read_write> visible : array<u32>;
+@group(0) @binding(4) var<storage, read_write> counts : array<atomic<u32>, 2>;
+
+const WORDS : u32 = 5u;   // one DrawIndexedIndirect command
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+  let i = gid.x;
+  if (i >= cull.info.x) { return; }
+
+  let sphere = spheres[i];
+  for (var p = 0u; p < 6u; p = p + 1u) {
+    let plane = cull.planes[p];
+    if (dot(plane.xyz, sphere.xyz) + plane.w < -sphere.w) { return; }
+  }
+
+  let transparent = i >= cull.info.y;
+  let slot = select(0u, 1u, transparent);
+  let base = select(0u, cull.info.y, transparent);
+  let out = base + atomicAdd(&counts[slot], 1u);
+
+  for (var w = 0u; w < WORDS; w = w + 1u) {
+    visible[out * WORDS + w] = source[i * WORDS + w];
+  }
+}
+`;
+const frustum = new Frustum();
+const matrix = new Matrix4();
+function writeFrustumPlanes(viewProj, out) {
+  matrix.copy(viewProj);
+  frustum.setFromProjectionMatrix(matrix, WebGPUCoordinateSystem);
+  for (let i = 0; i < 6; i++) {
+    const plane = frustum.planes[i];
+    out[i * 4 + 0] = plane.normal.x;
+    out[i * 4 + 1] = plane.normal.y;
+    out[i * 4 + 2] = plane.normal.z;
+    out[i * 4 + 3] = plane.constant;
+  }
+  return out;
+}
+const CULL_UNIFORM_BYTES = 112;
+const WORKGROUP_SIZE = 64;
+const COUNTS_BYTES = 8;
+const OPAQUE_COUNT_OFFSET = 0;
+const TRANSPARENT_COUNT_OFFSET = 4;
+class GpuCuller {
+  constructor(device, scene, source) {
+    __publicField(this, "visible");
+    __publicField(this, "counts");
+    __publicField(this, "device");
+    __publicField(this, "pipeline");
+    __publicField(this, "bindGroup");
+    __publicField(this, "uniform");
+    __publicField(this, "uniformData", new Float32Array(CULL_UNIFORM_BYTES / 4));
+    __publicField(this, "info");
+    __publicField(this, "zeros", new Uint32Array(COUNTS_BYTES / 4));
+    __publicField(this, "spheres");
+    __publicField(this, "readback");
+    __publicField(this, "groups");
+    __publicField(this, "reading", false);
+    __publicField(this, "lastCounts", [0, 0]);
+    this.device = device;
+    const n = instanceCount(scene);
+    this.groups = Math.ceil(n / WORKGROUP_SIZE);
+    this.spheres = createBuffer(device, scene.instanceSpheres, GPUBufferUsage.STORAGE, "spheres");
+    this.visible = createEmptyBuffer(
+      device,
+      scene.drawCommands.byteLength,
+      GPUBufferUsage.INDIRECT | GPUBufferUsage.STORAGE,
+      "visibleCommands"
+    );
+    this.counts = createEmptyBuffer(
+      device,
+      COUNTS_BYTES,
+      GPUBufferUsage.INDIRECT | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+      "drawCounts"
+    );
+    this.readback = createEmptyBuffer(
+      device,
+      COUNTS_BYTES,
+      GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+      "countsReadback"
+    );
+    this.uniform = createEmptyBuffer(
+      device,
+      CULL_UNIFORM_BYTES,
+      GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      "cullUniform"
+    );
+    this.info = new Uint32Array(this.uniformData.buffer, 96, 4);
+    this.info[0] = n;
+    this.info[1] = scene.transparent.first;
+    this.pipeline = device.createComputePipeline({
+      label: "cull",
+      layout: "auto",
+      compute: { module: device.createShaderModule({ label: "cull", code: cullShader }), entryPoint: "main" }
+    });
+    this.bindGroup = device.createBindGroup({
+      layout: this.pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.uniform } },
+        { binding: 1, resource: { buffer: this.spheres } },
+        { binding: 2, resource: { buffer: source } },
+        { binding: 3, resource: { buffer: this.visible } },
+        { binding: 4, resource: { buffer: this.counts } }
+      ]
+    });
+  }
+  cull(encoder, viewProj) {
+    writeFrustumPlanes(viewProj, this.uniformData);
+    this.device.queue.writeBuffer(this.uniform, 0, this.uniformData);
+    this.device.queue.writeBuffer(this.counts, 0, this.zeros);
+    const pass = encoder.beginComputePass({ label: "cull" });
+    pass.setPipeline(this.pipeline);
+    pass.setBindGroup(0, this.bindGroup);
+    pass.dispatchWorkgroups(this.groups);
+    pass.end();
+    if (!this.reading)
+      encoder.copyBufferToBuffer(this.counts, 0, this.readback, 0, COUNTS_BYTES);
+  }
+  get drawnCounts() {
+    return this.lastCounts;
+  }
+  pollCounts() {
+    if (this.reading)
+      return;
+    this.reading = true;
+    this.readback.mapAsync(GPUMapMode.READ).then(() => {
+      const view = new Uint32Array(this.readback.getMappedRange().slice(0));
+      this.lastCounts = [view[0], view[1]];
+      this.readback.unmap();
+      this.reading = false;
+    }).catch(() => {
+      this.reading = false;
+    });
+  }
+  dispose() {
+    for (const b of [this.spheres, this.visible, this.counts, this.readback, this.uniform]) {
+      b.destroy();
+    }
+  }
+}
 const sceneShader = `
 struct Camera {
   viewProj : mat4x4<f32>,
@@ -305,6 +461,7 @@ class GpuRenderer {
     __publicField(this, "width", 0);
     __publicField(this, "height", 0);
     __publicField(this, "useMultiDraw");
+    __publicField(this, "culling", false);
     this.canvas = canvas;
     this.ctx = ctx;
     this.useMultiDraw = ctx.multiDraw;
@@ -389,11 +546,33 @@ class GpuRenderer {
         { binding: 1, resource: { buffer: instances } }
       ]
     });
-    this.resources = { scene, vertexX, vertexY, vertexZ, indices, instances, indirect, bindGroup };
+    const culler = new GpuCuller(device, scene, indirect);
+    this.resources = {
+      scene,
+      vertexX,
+      vertexY,
+      vertexZ,
+      indices,
+      instances,
+      indirect,
+      bindGroup,
+      culler
+    };
     console.timeEnd("Uploading GPU buffers");
   }
   get drawCount() {
     return this.resources ? drawCount(this.resources.scene) : 0;
+  }
+  get cullingActive() {
+    return this.culling && this.useMultiDraw && this.ctx.multiDraw;
+  }
+  get drawnCount() {
+    if (!this.resources)
+      return 0;
+    if (!this.cullingActive)
+      return this.drawCount;
+    const [opaque, transparent] = this.resources.culler.drawnCounts;
+    return opaque + transparent;
   }
   render(viewProj, eye) {
     const r = this.resources;
@@ -402,6 +581,8 @@ class GpuRenderer {
     this.resize();
     this.updateCamera(viewProj, eye, r.scene.vertexScale);
     const encoder = this.ctx.device.createCommandEncoder();
+    const culler = this.cullingActive ? r.culler : void 0;
+    culler?.cull(encoder, viewProj);
     const pass = encoder.beginRenderPass({
       colorAttachments: [{
         view: this.color.createView(),
@@ -422,20 +603,22 @@ class GpuRenderer {
     pass.setVertexBuffer(1, r.vertexY);
     pass.setVertexBuffer(2, r.vertexZ);
     pass.setIndexBuffer(r.indices, "uint32");
+    const indirect = culler ? culler.visible : r.indirect;
     pass.setPipeline(this.opaquePipeline);
-    this.drawRange(pass, r.indirect, r.scene.opaque);
+    this.drawRange(pass, indirect, r.scene.opaque, culler?.counts, OPAQUE_COUNT_OFFSET);
     pass.setPipeline(this.transparentPipeline);
-    this.drawRange(pass, r.indirect, r.scene.transparent);
+    this.drawRange(pass, indirect, r.scene.transparent, culler?.counts, TRANSPARENT_COUNT_OFFSET);
     pass.end();
     this.ctx.device.queue.submit([encoder.finish()]);
+    culler?.pollCounts();
   }
-  drawRange(pass, indirect, range) {
+  drawRange(pass, indirect, range, counts, countOffset) {
     if (range.count === 0)
       return;
     const stride = DRAW_COMMAND_WORDS * 4;
     const offset = range.first * stride;
     if (this.useMultiDraw && this.ctx.multiDraw) {
-      pass.multiDrawIndexedIndirect(indirect, offset, range.count);
+      pass.multiDrawIndexedIndirect(indirect, offset, range.count, counts, countOffset);
       return;
     }
     for (let i = 0; i < range.count; i++) {
@@ -482,6 +665,7 @@ class GpuRenderer {
     const r = this.resources;
     if (!r)
       return;
+    r.culler.dispose();
     for (const b of [r.vertexX, r.vertexY, r.vertexZ, r.indices, r.instances, r.indirect]) {
       b.destroy();
     }
@@ -604,33 +788,57 @@ function attachOrbitInput(canvas, camera) {
     canvas.removeEventListener("contextmenu", menu);
   };
 }
+const stallReason = (idleMs) => document.hidden ? "paused: page is not visible" : `paused: no frames for ${(idleMs / 1e3).toFixed(1)}s`;
+const WATCHDOG_INTERVAL_MS = 1e3;
+const STALL_MS = 2e3;
 class GpuViewer {
   constructor(canvas, ctx) {
     __publicField(this, "renderer");
     __publicField(this, "camera", new OrbitCamera());
     __publicField(this, "onFrame");
+    __publicField(this, "onStopped");
+    __publicField(this, "onStalled");
     __publicField(this, "detachInput");
     __publicField(this, "running", false);
     __publicField(this, "frames", 0);
     __publicField(this, "frameStart", 0);
     __publicField(this, "cpuMs", 0);
     __publicField(this, "triangles", 0);
+    __publicField(this, "lastFrameAt", 0);
+    __publicField(this, "stalled", false);
+    __publicField(this, "watchdog");
+    __publicField(this, "checkStalled", () => {
+      const idle = performance.now() - this.lastFrameAt;
+      const stalled = this.running && idle > STALL_MS;
+      if (stalled === this.stalled)
+        return;
+      this.stalled = stalled;
+      this.onStalled?.(stalled ? stallReason(idle) : void 0);
+    });
     __publicField(this, "loop", () => {
       if (!this.running)
         return;
       this.camera.setAspect(this.renderer.aspect || 1);
       const t0 = performance.now();
-      this.renderer.render(this.camera.viewProjection, this.camera.eye);
+      try {
+        this.renderer.render(this.camera.viewProjection, this.camera.eye);
+      } catch (e) {
+        this.fail("Rendering stopped: " + (e.message ?? e));
+        return;
+      }
       this.cpuMs += performance.now() - t0;
       this.frames++;
+      this.lastFrameAt = performance.now();
       const elapsed = performance.now() - this.frameStart;
       if (elapsed > 500 && this.onFrame) {
         this.onFrame({
           fps: this.frames * 1e3 / elapsed,
           cpuMs: this.cpuMs / this.frames,
           drawCommands: this.renderer.drawCount,
+          drawnCommands: this.renderer.drawnCount,
           triangles: this.triangles,
-          multiDraw: this.renderer.useMultiDraw && this.context.multiDraw
+          multiDraw: this.renderer.useMultiDraw && this.context.multiDraw,
+          culling: this.renderer.cullingActive
         });
         this.frames = 0;
         this.cpuMs = 0;
@@ -640,6 +848,14 @@ class GpuViewer {
     });
     this.renderer = new GpuRenderer(canvas, ctx);
     this.detachInput = attachOrbitInput(canvas, this.camera);
+    ctx.lost.then((info) => this.fail(`WebGPU device lost (${info.reason}): ${info.message}`));
+  }
+  fail(reason) {
+    if (!this.running)
+      return;
+    this.running = false;
+    console.error(reason);
+    this.onStopped?.(reason);
   }
   static async create(canvas) {
     return new GpuViewer(canvas, await requestGpuContext());
@@ -661,10 +877,14 @@ class GpuViewer {
       return;
     this.running = true;
     this.frameStart = performance.now();
+    this.lastFrameAt = performance.now();
+    this.watchdog = setInterval(this.checkStalled, WATCHDOG_INTERVAL_MS);
     requestAnimationFrame(this.loop);
   }
   stop() {
     this.running = false;
+    clearInterval(this.watchdog);
+    this.watchdog = void 0;
   }
   dispose() {
     this.stop();
@@ -692,6 +912,7 @@ const ROWS = [
   ["adapter", "Adapter"],
   ["status", "Multi-draw"],
   ["draws", "Draw commands"],
+  ["drawn", "Submitted"],
   ["tris", "Triangles"],
   ["fps", "FPS"],
   ["cpu", "CPU ms / frame"]
@@ -708,15 +929,17 @@ function createGpuPanel() {
   page.appendChild(canvas);
   const panel = document.createElement("div");
   panel.className = "gpu-panel";
-  panel.innerHTML = "<h2>BIM Open Schema &mdash; WebGPU multiDrawIndexedIndirect</h2>" + ROWS.map(([id, label]) => `<div class="gpu-row"><span>${label}</span><span id="gpu-${id}">-</span></div>`).join("") + '<div class="gpu-note" id="gpu-note">Starting up...</div><label class="gpu-toggle"><input type="checkbox" id="gpu-multi" checked disabled>Use multiDrawIndexedIndirect</label>';
+  panel.innerHTML = "<h2>BIM Open Schema &mdash; WebGPU multiDrawIndexedIndirect</h2>" + ROWS.map(([id, label]) => `<div class="gpu-row"><span>${label}</span><span id="gpu-${id}">-</span></div>`).join("") + '<div class="gpu-note" id="gpu-note">Starting up...</div><label class="gpu-toggle"><input type="checkbox" id="gpu-multi" checked disabled>Use multiDrawIndexedIndirect</label><label class="gpu-toggle"><input type="checkbox" id="gpu-cull" disabled>GPU frustum culling</label>';
   page.appendChild(panel);
   document.body.appendChild(page);
   const cell = (id) => document.getElementById("gpu-" + id);
   const note = cell("note");
   const toggle = cell("multi");
+  const cullToggle = cell("cull");
   return {
     canvas,
     toggle,
+    cullToggle,
     set(id, value) {
       cell(id).textContent = value;
     },
@@ -731,9 +954,11 @@ function showStats(panel, stats) {
   panel.set("fps", stats.fps.toFixed(1));
   panel.set("cpu", stats.cpuMs.toFixed(2));
   panel.set("draws", fmt(stats.drawCommands));
+  panel.set("drawn", stats.culling ? fmt(stats.drawnCommands) : "all");
   panel.set("tris", fmt(Math.round(stats.triangles)));
 }
-const MODEL = "/ara3d-webgl/Snowdon Towers Sample Architectural.bos";
+const DEFAULT_MODEL = "Snowdon Towers Sample Architectural.bos";
+const MODEL = "/ara3d-webgl/" + (new URLSearchParams(location.search).get("model") ?? DEFAULT_MODEL);
 async function run() {
   const panel = createGpuPanel();
   if (!isWebGpuAvailable()) {
@@ -760,7 +985,13 @@ async function run() {
     viewer.renderer.useMultiDraw = panel.toggle.checked;
     panel.set("status", panel.toggle.checked ? "multiDrawIndexedIndirect" : "drawIndexedIndirect loop");
   });
+  panel.cullToggle.disabled = !multiDraw;
+  panel.cullToggle.addEventListener("change", () => {
+    viewer.renderer.culling = panel.cullToggle.checked;
+  });
   viewer.onFrame = (stats) => showStats(panel, stats);
+  viewer.onStopped = (reason) => panel.setNote(reason, true);
+  viewer.onStalled = (reason) => panel.set("fps", reason ? "paused" : "-");
   viewer.start();
   panel.setNote("Loading model...");
   const loader = new BosGpuLoader();
@@ -796,4 +1027,4 @@ function enableFileDrop(panel, viewer, loader) {
   });
 }
 run();
-//# sourceMappingURL=exampleWebGpuMultiDraw.1c9ad80e.js.map
+//# sourceMappingURL=exampleWebGpuMultiDraw.adcc0ff0.js.map
