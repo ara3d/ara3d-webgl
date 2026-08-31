@@ -2,6 +2,7 @@ import { SimpleEventDispatcher } from 'ste-simple-events'
 import { BimOpenSchemaLoader } from '../../loader/bimOpenSchemaLoader'
 import { BimData } from '../../loader/bimData'
 import { InputHandler } from './inputHandler'
+import { Viewer } from '../viewer'
 
 const DROP_OUTLINE = '3px dashed rgba(255, 255, 255, 0.85)'
 
@@ -24,7 +25,14 @@ function findBosFile (files: FileList, extensions: string[]): File | undefined {
  * Handles drag-and-drop of local BOS files onto the viewer canvas.
  */
 export class BosFileDropHandler extends InputHandler {
+  private _viewer: Viewer
   private _loader = new BimOpenSchemaLoader()
+
+  constructor (viewer: Viewer) {
+    super(viewer)
+    this._viewer = viewer
+  }
+
   private _dragDepth = 0
   private _loading = false
 

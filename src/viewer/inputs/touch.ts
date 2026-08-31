@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { InputHandler } from './inputHandler'
-import { Viewer } from '../viewer'
+import { InputHost } from './inputHost'
 
 export class TouchHandler extends InputHandler {
   private readonly TAP_DURATION_MS: number = 500
@@ -11,18 +11,18 @@ export class TouchHandler extends InputHandler {
   rotateSpeed = 1
   orbitSpeed = 1
 
-  constructor (viewer: Viewer) {
-    super(viewer)
-    this.rotateSpeed = viewer.settings.camera.controls.rotateSpeed
-    this.orbitSpeed = viewer.settings.camera.controls.orbitSpeed
+  constructor (host: InputHost) {
+    super(host)
+    this.rotateSpeed = this._host.settings.camera.controls.rotateSpeed
+    this.orbitSpeed = this._host.settings.camera.controls.orbitSpeed
   }
 
   private get camera () {
-    return this._viewer.camera
+    return this._host.camera
   }
 
   private get viewport () {
-    return this._viewer.viewport
+    return this._host.viewport
   }
 
   // State
@@ -83,7 +83,7 @@ export class TouchHandler extends InputHandler {
   }
 
   private onDrag = (delta: THREE.Vector2) => {
-    if (this._viewer.inputs.pointerActive === 'orbit') {
+    if (this._host.inputs.pointerActive === 'orbit') {
       this.camera.do().orbit(this.toRotation(delta, this.orbitSpeed))
     } else {
       this.camera.do().rotate(this.toRotation(delta, this.rotateSpeed))
@@ -96,7 +96,7 @@ export class TouchHandler extends InputHandler {
   }
 
   private onPinchOrSpread = (delta: number) => {
-    if (this._viewer.inputs.pointerActive === 'orbit') {
+    if (this._host.inputs.pointerActive === 'orbit') {
       this.camera.do().zoom(1 + delta * this.ZOOM_SPEED)
     } else {
       this.camera.do().move1(delta * this.ZOOM_SPEED, 'Z')

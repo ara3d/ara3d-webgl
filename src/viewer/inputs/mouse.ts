@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { InputHandler } from './inputHandler'
-import { Viewer } from '../viewer'
+import { InputHost } from './inputHost'
 
 type Button = 'main' | 'middle' | 'right' | undefined;
 type Modifier = 'ctrl' | 'shift' | 'none';
@@ -25,18 +25,18 @@ export class MouseHandler extends InputHandler {
   private _lastPosition: THREE.Vector2 | undefined
   private _downPosition: THREE.Vector2 | undefined
 
-  constructor (viewer: Viewer) {
-    super(viewer)
-    this.rotateSpeed = viewer.settings.camera.controls.rotateSpeed
-    this.orbitSpeed = viewer.settings.camera.controls.orbitSpeed
+  constructor (host: InputHost) {
+    super(host)
+    this.rotateSpeed = this._host.settings.camera.controls.rotateSpeed
+    this.orbitSpeed = this._host.settings.camera.controls.orbitSpeed
   }
 
   private get camera () {
-    return this._viewer.camera
+    return this._host.camera
   }
 
   private get viewport () {
-    return this._viewer.viewport
+    return this._host.viewport
   }
 
   private get canvas () {
@@ -44,7 +44,7 @@ export class MouseHandler extends InputHandler {
   }
 
   private get inputs () {
-    return this._viewer.inputs
+    return this._host.inputs
   }
 
   protected override addListeners (): void {

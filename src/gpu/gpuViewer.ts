@@ -1,8 +1,13 @@
 import * as THREE from 'three'
 import { GpuContext, requestGpuContext } from './gpuDevice'
 import { GpuRenderer } from './gpuRenderer'
-import { OrbitCamera } from './orbitCamera'
-import { attachOrbitInput } from './orbitInput'
+import { CameraControls } from '../controls/cameraControls'
+import {
+  modelEye,
+  modelViewProjection,
+  toCameraSpace,
+  useWebGpuProjection
+} from './gpuCameraView'
 import { GpuScene, instanceCount } from './gpuScene'
 
 /** What the viewer reports once per frame. */
@@ -26,31 +31,38 @@ const stallReason = (idleMs: number) =>
 const WATCHDOG_INTERVAL_MS = 1000
 const STALL_MS = 2000
 
-/** Ties a canvas, an orbit camera and the indirect renderer into a render loop. */
+/** Ties a canvas, the viewer camera controls and the indirect renderer into a render loop. */
 export class GpuViewer {
   readonly renderer: GpuRenderer
-  readonly camera = new OrbitCamera()
+  readonly controls: CameraControls
   onFrame: ((stats: FrameStats) => void) | undefined
   /** Called once if rendering stops, with the reason. */
   onStopped: ((reason: string) => void) | undefined
   /** Called when frames stop arriving, and again with undefined when they resume. */
   onStalled: ((reason: string | undefined) => void) | undefined
 
-  private readonly detachInput: () => void
   private running = false
   private frames = 0
   private frameStart = 0
   private cpuMs = 0
   private triangles = 0
   private lastFrameAt = 0
+  private lastUpdateAt = 0
   private stalled = false
   private watchdog: ReturnType<typeof setInterval> | undefined
 
+  private readonly viewProj = new THREE.Matrix4()
+  private readonly eye = new THREE.Vector3()
+
   private constructor (canvas: HTMLCanvasElement, ctx: GpuContext) {
     this.renderer = new GpuRenderer(canvas, ctx)
-    this.detachInput = attachOrbitInput(canvas, this.camera)
+    this.controls = new CameraControls(canvas)
+    useWebGpuProjection(this.controls.camera)
     ctx.lost.then((info) => this.fail(`WebGPU device lost (${info.reason}): ${info.message}`))
   }
+
+  /** The camera the controls drive. */
+  get camera () { return this.controls.camera }
 
   /** Stops the loop and reports why, so a dead device is not a silent freeze. */
   private fail (reason: string) {
@@ -69,9 +81,14 @@ export class GpuViewer {
   setScene (scene: GpuScene) {
     this.renderer.setScene(scene)
     this.triangles = scene.triangleCount
-    this.camera.frame(
+
+    const bounds = toCameraSpace(new THREE.Box3(
       new THREE.Vector3().fromArray(scene.boundsMin),
-      new THREE.Vector3().fromArray(scene.boundsMax))
+      new THREE.Vector3().fromArray(scene.boundsMax)))
+    const radius = Math.max(bounds.getSize(new THREE.Vector3()).length() * 0.5, 1e-3)
+    this.controls.setClipPlanes(Math.max(radius / 2000, 1e-3), radius * 50)
+    this.controls.frame(bounds)
+
     console.log(`Scene has ${instanceCount(scene)} instances`)
   }
 
@@ -80,6 +97,7 @@ export class GpuViewer {
     this.running = true
     this.frameStart = performance.now()
     this.lastFrameAt = performance.now()
+    this.lastUpdateAt = performance.now()
     this.watchdog = setInterval(this.checkStalled, WATCHDOG_INTERVAL_MS)
     requestAnimationFrame(this.loop)
   }
@@ -105,17 +123,22 @@ export class GpuViewer {
 
   dispose () {
     this.stop()
-    this.detachInput()
+    this.controls.dispose()
     this.renderer.dispose()
   }
 
   private readonly loop = () => {
     if (!this.running) return
 
-    this.camera.setAspect(this.renderer.aspect || 1)
+    const now = performance.now()
+    this.controls.update(Math.min((now - this.lastUpdateAt) / 1000, 0.1))
+    this.lastUpdateAt = now
+
     const t0 = performance.now()
     try {
-      this.renderer.render(this.camera.viewProjection, this.camera.eye)
+      this.renderer.render(
+        modelViewProjection(this.camera, this.viewProj),
+        modelEye(this.camera, this.eye))
     } catch (e) {
       this.fail('Rendering stopped: ' + ((e as Error).message ?? e))
       return

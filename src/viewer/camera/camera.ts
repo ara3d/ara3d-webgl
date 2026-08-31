@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-import { Viewport } from '../viewport'
+import { CameraViewport } from './cameraViewport'
 import { Settings } from '../viewerSettings'
 import { clamp } from 'three/src/math/MathUtils'
 import { ISignal, SignalDispatcher } from 'ste-signals'
@@ -17,7 +17,7 @@ export class Camera {
   camPerspective: PerspectiveWrapper
   camOrthographic: OrthographicWrapper
 
-  private _viewport: Viewport
+  private _viewport: CameraViewport
   private _lerp: CameraLerp
   private _movement: CameraMovementDo
 
@@ -38,6 +38,9 @@ export class Camera {
   // saves
   _savedPosition: THREE.Vector3 = new THREE.Vector3(0, 0, -5)
   _savedTarget: THREE.Vector3 = new THREE.Vector3(0, 0, 0)
+
+  /** Bounds of the loaded content, used by frame('all'). */
+  sceneBounds: THREE.Box3 | undefined
 
   private _onValueChanged = new SignalDispatcher()
 
@@ -104,7 +107,7 @@ export class Camera {
   private _velocityBlendFactor: number = 0.0001
   private _moveSpeed: number = 1
 
-  constructor (viewport: Viewport, settings: Settings) {
+  constructor (viewport: CameraViewport, settings: Settings) {
     this.camPerspective = new PerspectiveWrapper(
       new THREE.PerspectiveCamera()
     )

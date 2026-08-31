@@ -1,63 +1,23 @@
 import * as THREE from 'three'
-import { Viewer } from '../viewer'
-import { KeyboardHandler, KEYS } from './keyboard'
+import { KeyboardHandler } from './keyboard'
 import { TouchHandler } from './touch'
 import { MouseHandler } from './mouse'
-import { BosFileDropHandler } from './bosFileDrop'
+import { InputHandler } from './inputHandler'
+import { InputHost, InputModes, PointerMode } from './inputHost'
+import { DefaultInputScheme } from './defaultInputScheme'
 import { SignalDispatcher } from 'ste-signals'
 import { SimpleEventDispatcher } from 'ste-simple-events'
-export { KEYS } from './keyboard'
-
-/** Pointers mode supported by the viewer */
-export type PointerMode = 'orbit' | 'look' | 'pan' | 'zoom' | 'rect';
-
-export class DefaultInputScheme {
-  private _viewer: Viewer
-
-  constructor (viewer: Viewer) {
-    this._viewer = viewer
-  }
-
-  onKeyAction (key: number): boolean {
-    const camera = this._viewer.camera
-    switch (key) {
-      case KEYS.KEY_P:
-        camera.orthographic = !camera.orthographic
-        return true
-      case KEYS.KEY_ADD:
-      case KEYS.KEY_OEM_PLUS:
-        camera.speed += 1
-        return true
-      case KEYS.KEY_SUBTRACT:
-      case KEYS.KEY_OEM_MINUS:
-        camera.speed -= 1
-        return true
-      case KEYS.KEY_F8:
-      case KEYS.KEY_SPACE:
-        this._viewer.inputs.pointerActive =
-                    this._viewer.inputs.pointerFallback
-        return true
-      case KEYS.KEY_HOME:
-        camera.lerp(1).reset()
-        return true
-        // Selection
-      case KEYS.KEY_ESCAPE:
-        return true
-      case KEYS.KEY_Z:
-      case KEYS.KEY_F:
-        camera.lerp(1).frame('all')
-        return true
-      default:
-        return false
-    }
-  }
-}
+import type { BosFileDropHandler } from './bosFileDrop'
+export { KEYS } from './keys'
+export { DefaultInputScheme } from './defaultInputScheme'
+export type { PointerMode } from './inputHost'
 
 /**
- * Manages and registers all viewer user inputs for mouse, keyboard and touch
+ * Manages and registers all user inputs for mouse, keyboard and touch.
+ * File drop is optional and supplied by the host, which keeps this usable
+ * by any host, not just the Three.js viewer.
  */
-export class Input {
-  private _viewer: Viewer
+export class Input implements InputModes {
   private _scheme: DefaultInputScheme
   touch: TouchHandler
   mouse: MouseHandler
@@ -68,22 +28,24 @@ export class Input {
   private _pointerFallback: PointerMode = 'look'
   private _pointerOverride: PointerMode | undefined
 
-  constructor (viewer: Viewer) {
-    this._viewer = viewer
-    this._scheme = new DefaultInputScheme(viewer)
+  constructor (host: InputHost, fileDrop?: BosFileDropHandler) {
+    this._scheme = new DefaultInputScheme(host)
 
-    this.keyboard = new KeyboardHandler(viewer)
-    this.mouse = new MouseHandler(viewer)
-    this.touch = new TouchHandler(viewer)
-    if (viewer.settings.fileDrop.enable) {
-      this.bosFileDrop = new BosFileDropHandler(viewer)
-    }
-    this.pointerActive = viewer.settings.camera.controls.orbit
-      ? 'orbit'
-      : 'look'
-    this._pointerFallback = viewer.settings.camera.controls.orbit
+    this.keyboard = new KeyboardHandler(host)
+    this.mouse = new MouseHandler(host)
+    this.touch = new TouchHandler(host)
+    this.bosFileDrop = fileDrop
+
+    this.pointerActive = host.settings.camera.controls.orbit ? 'orbit' : 'look'
+    this._pointerFallback = host.settings.camera.controls.orbit
       ? 'look'
       : 'orbit'
+  }
+
+  private get handlers (): InputHandler[] {
+    const all: InputHandler[] = [this.keyboard, this.mouse, this.touch]
+    if (this.bosFileDrop) all.push(this.bosFileDrop)
+    return all
   }
 
   /**
@@ -165,23 +127,14 @@ export class Input {
   }
 
   registerAll () {
-    this.keyboard.register()
-    this.mouse.register()
-    this.touch.register()
-    this.bosFileDrop?.register()
+    this.handlers.forEach((h) => h.register())
   }
 
   unregisterAll = () => {
-    this.mouse.unregister()
-    this.keyboard.unregister()
-    this.touch.unregister()
-    this.bosFileDrop?.unregister()
+    this.handlers.forEach((h) => h.unregister())
   }
 
   resetAll () {
-    this.mouse.reset()
-    this.keyboard.reset()
-    this.touch.reset()
-    this.bosFileDrop?.reset()
+    this.handlers.forEach((h) => h.reset())
   }
 }

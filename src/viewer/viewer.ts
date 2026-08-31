@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { Settings, getSettings, PartialSettings } from './viewerSettings'
 import { Camera } from './camera/camera'
 import { Input } from './inputs/input'
+import { BosFileDropHandler } from './inputs/bosFileDrop'
 import { Environment } from './environment'
 import { GizmoOrbit } from './gizmos/gizmoOrbit'
 import { Viewport } from './viewport'
@@ -34,7 +35,10 @@ export class Viewer {
       this.settings
     )
 
-    this.inputs = new Input(this)
+    this.inputs = new Input(
+      this,
+      this.settings.fileDrop.enable ? new BosFileDropHandler(this) : undefined
+    )
 
     if (this.settings.camera.gizmo.enable) {
       this.gizmoOrbit = new GizmoOrbit(

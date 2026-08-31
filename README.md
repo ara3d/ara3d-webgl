@@ -50,6 +50,31 @@ whether the extension is present, the draw and triangle counts, and a frame
 timer. A checkbox switches between the multi-draw call and one
 `drawIndexedIndirect` per instance, which is the same buffers with more CPU work.
 
+### Camera controls
+
+Both viewers share one set of camera controls, in
+[`src/controls`](https://github.com/ara3d/ara3d-webgl/tree/main/src/controls).
+`CameraControls` needs nothing but a canvas: it owns the camera and registers
+the mouse, keyboard and touch handlers, and a renderer drives it by calling
+`update(deltaTime)` once per frame.
+
+```js
+const controls = new CameraControls(canvas)
+controls.frame(bounds)          // look at a box, and make it the Home target
+controls.update(deltaTime)      // once per frame
+```
+
+Left drag orbits, middle drag pans, right drag looks around, and the wheel
+zooms. W/A/S/D or the arrow keys fly, Q and E move down and up, shift goes
+faster, `+` and `-` change the speed, `F` frames the model, `Home` returns to
+the framed view and `P` toggles orthographic.
+
+BOS geometry is Z-up while the camera works in the Y-up space Three.js
+assumes. The Three.js viewer converts by rotating the model root; the WebGPU
+viewer folds the same rotation into the matrices it hands the renderer, so
+geometry, instance transforms and culling all stay in model space. That code is
+[`gpuCameraView.ts`](https://github.com/ara3d/ara3d-webgl/blob/main/src/gpu/gpuCameraView.ts).
+
 ### Optional GPU frustum culling
 
 Culling is off by default and switched on with a checkbox in the demo, or

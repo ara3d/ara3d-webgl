@@ -1,15 +1,15 @@
-import { Viewer } from '../viewer'
+import { InputHost } from './inputHost'
 
 /**
  * Base class for various input handlers.
  * It provides convenience to register to and unregister from events.
  */
 export class InputHandler {
-  protected _viewer: Viewer
+  protected _host: InputHost
   protected _unregisters: Function[] = []
 
-  constructor (viewer: Viewer) {
-    this._viewer = viewer
+  constructor (host: InputHost) {
+    this._host = host
   }
 
   protected reg = (
