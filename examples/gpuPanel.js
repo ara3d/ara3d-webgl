@@ -15,7 +15,21 @@ const STYLE = `
 .gpu-note { margin-top: 8px; color: #9aa4b2; }
 .gpu-note.bad { color: #ff8f8f; }
 .gpu-toggle { margin-top: 10px; display: flex; align-items: center; gap: 6px; color: #cbd4e1; }
+.gpu-slider { margin-top: 6px; display: flex; align-items: center; gap: 8px; color: #cbd4e1; }
+.gpu-slider input { flex: 1; }
+.gpu-slider span { color: #ffd479; min-width: 56px; text-align: right; }
 `
+
+const MAX_THRESHOLD_PX = 4
+
+/**
+ * Maps the slider's 0..1000 position to pixels. The cube keeps the steps fine
+ * where the useful values are, which is well under half a pixel.
+ */
+const sliderToPixels = (position) =>
+  Math.round(MAX_THRESHOLD_PX * Math.pow(position / 1000, 3) * 1000) / 1000
+
+const pixelsToSlider = (px) => Math.round(1000 * Math.cbrt(px / MAX_THRESHOLD_PX))
 
 const ROWS = [
   ['adapter', 'Adapter'],
@@ -51,7 +65,12 @@ export function createGpuPanel () {
     '<label class="gpu-toggle"><input type="checkbox" id="gpu-multi" checked disabled>' +
     'Use multiDrawIndexedIndirect</label>' +
     '<label class="gpu-toggle"><input type="checkbox" id="gpu-cull" disabled>' +
-    'GPU frustum culling</label>'
+    'GPU frustum culling</label>' +
+    '<label class="gpu-toggle"><input type="checkbox" id="gpu-contrib" disabled>' +
+    'GPU contribution culling</label>' +
+    '<div class="gpu-slider"><input type="range" id="gpu-contrib-px" ' +
+    'min="0" max="1000" step="1" disabled>' +
+    '<span id="gpu-contrib-value">-</span></div>'
   page.appendChild(panel)
 
   document.body.appendChild(page)
@@ -60,11 +79,26 @@ export function createGpuPanel () {
   const note = cell('note')
   const toggle = cell('multi')
   const cullToggle = cell('cull')
+  const contribToggle = cell('contrib')
+  const contribSlider = cell('contrib-px')
+  const contribValue = cell('contrib-value')
 
   return {
     canvas,
     toggle,
     cullToggle,
+    contribToggle,
+    contribSlider,
+    /** Threshold in pixels currently shown by the slider. */
+    contributionPixels () { return sliderToPixels(Number(contribSlider.value)) },
+    /** Moves the slider to a threshold in pixels and updates the readout. */
+    setContributionPixels (px) {
+      contribSlider.value = String(pixelsToSlider(px))
+      this.showContributionPixels()
+    },
+    showContributionPixels () {
+      contribValue.textContent = this.contributionPixels().toFixed(2) + ' px'
+    },
     set (id, value) { cell(id).textContent = value },
     setNote (text, bad = false) {
       note.textContent = text

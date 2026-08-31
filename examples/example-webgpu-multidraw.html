@@ -52,6 +52,17 @@ async function run () {
     viewer.renderer.culling = panel.cullToggle.checked
   })
 
+  panel.contribToggle.disabled = !multiDraw
+  panel.contribSlider.disabled = !multiDraw
+  panel.setContributionPixels(viewer.renderer.contributionThreshold)
+  panel.contribToggle.addEventListener('change', () => {
+    viewer.renderer.contributionCulling = panel.contribToggle.checked
+  })
+  panel.contribSlider.addEventListener('input', () => {
+    panel.showContributionPixels()
+    viewer.renderer.contributionThreshold = panel.contributionPixels()
+  })
+
   viewer.onFrame = (stats) => showStats(panel, stats)
   viewer.onStopped = (reason) => panel.setNote(reason, true)
   // Browsers stop animation frames while the page is hidden; say so instead of

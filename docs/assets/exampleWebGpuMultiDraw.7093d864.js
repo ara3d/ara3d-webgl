@@ -237,7 +237,9 @@ const align4 = (n) => n + 3 & ~3;
 const cullShader = `
 struct Cull {
   planes : array<vec4<f32>, 6>,
-  info   : vec4<u32>,   // x: instance count, y: first transparent instance
+  info   : vec4<u32>,   // x: instance count, y: first transparent instance, z: 1 to frustum cull
+  depth  : vec4<f32>,   // dot(xyz, p) + w is the view depth of the point p
+  limits : vec4<f32>,   // x: pixels per world unit at unit depth, y: minimum diameter in pixels
 };
 
 @group(0) @binding(0) var<uniform> cull : Cull;
@@ -248,16 +250,32 @@ struct Cull {
 
 const WORDS : u32 = 5u;   // one DrawIndexedIndirect command
 
+fn outsideFrustum(sphere : vec4<f32>) -> bool {
+  for (var p = 0u; p < 6u; p = p + 1u) {
+    let plane = cull.planes[p];
+    if (dot(plane.xyz, sphere.xyz) + plane.w < -sphere.w) { return true; }
+  }
+  return false;
+}
+
+/// True when the sphere projects to less than the minimum diameter in pixels.
+/// Spheres reaching the eye have no meaningful projected size, so they are kept.
+fn tooSmall(sphere : vec4<f32>, minPixels : f32) -> bool {
+  let depth = dot(cull.depth.xyz, sphere.xyz) + cull.depth.w;
+  if (depth <= sphere.w) { return false; }
+  return 2.0 * sphere.w * cull.limits.x / depth < minPixels;
+}
+
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
   let i = gid.x;
   if (i >= cull.info.x) { return; }
 
   let sphere = spheres[i];
-  for (var p = 0u; p < 6u; p = p + 1u) {
-    let plane = cull.planes[p];
-    if (dot(plane.xyz, sphere.xyz) + plane.w < -sphere.w) { return; }
-  }
+  if (cull.info.z != 0u && outsideFrustum(sphere)) { return; }
+
+  let minPixels = cull.limits.y;
+  if (minPixels > 0.0 && tooSmall(sphere, minPixels)) { return; }
 
   let transparent = i >= cull.info.y;
   let slot = select(0u, 1u, transparent);
@@ -283,7 +301,21 @@ function writeFrustumPlanes(viewProj, out) {
   }
   return out;
 }
-const CULL_UNIFORM_BYTES = 112;
+function pixelsPerUnitAtUnitDepth(viewProj, height) {
+  const e = viewProj.elements;
+  return 0.5 * height * Math.hypot(e[1], e[5], e[9]);
+}
+function writeDepthPlane(viewProj, out, offset) {
+  const e = viewProj.elements;
+  out[offset + 0] = e[3];
+  out[offset + 1] = e[7];
+  out[offset + 2] = e[11];
+  out[offset + 3] = e[15];
+  return out;
+}
+const CULL_UNIFORM_BYTES = 144;
+const DEPTH_PLANE_FLOAT = 28;
+const LIMITS_FLOAT = 32;
 const WORKGROUP_SIZE = 64;
 const COUNTS_BYTES = 8;
 const OPAQUE_COUNT_OFFSET = 0;
@@ -351,8 +383,12 @@ class GpuCuller {
       ]
     });
   }
-  cull(encoder, viewProj) {
+  cull(encoder, viewProj, params) {
     writeFrustumPlanes(viewProj, this.uniformData);
+    writeDepthPlane(viewProj, this.uniformData, DEPTH_PLANE_FLOAT);
+    this.info[2] = params.frustum ? 1 : 0;
+    this.uniformData[LIMITS_FLOAT] = pixelsPerUnitAtUnitDepth(viewProj, params.viewportHeight);
+    this.uniformData[LIMITS_FLOAT + 1] = params.minPixels;
     this.device.queue.writeBuffer(this.uniform, 0, this.uniformData);
     this.device.queue.writeBuffer(this.counts, 0, this.zeros);
     const pass = encoder.beginComputePass({ label: "cull" });
@@ -462,6 +498,8 @@ class GpuRenderer {
     __publicField(this, "height", 0);
     __publicField(this, "useMultiDraw");
     __publicField(this, "culling", false);
+    __publicField(this, "contributionCulling", false);
+    __publicField(this, "contributionThreshold", 0.1);
     this.canvas = canvas;
     this.ctx = ctx;
     this.useMultiDraw = ctx.multiDraw;
@@ -564,7 +602,7 @@ class GpuRenderer {
     return this.resources ? drawCount(this.resources.scene) : 0;
   }
   get cullingActive() {
-    return this.culling && this.useMultiDraw && this.ctx.multiDraw;
+    return (this.culling || this.contributionCulling) && this.useMultiDraw && this.ctx.multiDraw;
   }
   get drawnCount() {
     if (!this.resources)
@@ -582,7 +620,11 @@ class GpuRenderer {
     this.updateCamera(viewProj, eye, r.scene.vertexScale);
     const encoder = this.ctx.device.createCommandEncoder();
     const culler = this.cullingActive ? r.culler : void 0;
-    culler?.cull(encoder, viewProj);
+    culler?.cull(encoder, viewProj, {
+      frustum: this.culling,
+      minPixels: this.contributionCulling ? this.contributionThreshold : 0,
+      viewportHeight: this.height
+    });
     const pass = encoder.beginRenderPass({
       colorAttachments: [{
         view: this.color.createView(),
@@ -907,7 +949,13 @@ const STYLE = `
 .gpu-note { margin-top: 8px; color: #9aa4b2; }
 .gpu-note.bad { color: #ff8f8f; }
 .gpu-toggle { margin-top: 10px; display: flex; align-items: center; gap: 6px; color: #cbd4e1; }
+.gpu-slider { margin-top: 6px; display: flex; align-items: center; gap: 8px; color: #cbd4e1; }
+.gpu-slider input { flex: 1; }
+.gpu-slider span { color: #ffd479; min-width: 56px; text-align: right; }
 `;
+const MAX_THRESHOLD_PX = 4;
+const sliderToPixels = (position) => Math.round(MAX_THRESHOLD_PX * Math.pow(position / 1e3, 3) * 1e3) / 1e3;
+const pixelsToSlider = (px) => Math.round(1e3 * Math.cbrt(px / MAX_THRESHOLD_PX));
 const ROWS = [
   ["adapter", "Adapter"],
   ["status", "Multi-draw"],
@@ -929,17 +977,32 @@ function createGpuPanel() {
   page.appendChild(canvas);
   const panel = document.createElement("div");
   panel.className = "gpu-panel";
-  panel.innerHTML = "<h2>BIM Open Schema &mdash; WebGPU multiDrawIndexedIndirect</h2>" + ROWS.map(([id, label]) => `<div class="gpu-row"><span>${label}</span><span id="gpu-${id}">-</span></div>`).join("") + '<div class="gpu-note" id="gpu-note">Starting up...</div><label class="gpu-toggle"><input type="checkbox" id="gpu-multi" checked disabled>Use multiDrawIndexedIndirect</label><label class="gpu-toggle"><input type="checkbox" id="gpu-cull" disabled>GPU frustum culling</label>';
+  panel.innerHTML = "<h2>BIM Open Schema &mdash; WebGPU multiDrawIndexedIndirect</h2>" + ROWS.map(([id, label]) => `<div class="gpu-row"><span>${label}</span><span id="gpu-${id}">-</span></div>`).join("") + '<div class="gpu-note" id="gpu-note">Starting up...</div><label class="gpu-toggle"><input type="checkbox" id="gpu-multi" checked disabled>Use multiDrawIndexedIndirect</label><label class="gpu-toggle"><input type="checkbox" id="gpu-cull" disabled>GPU frustum culling</label><label class="gpu-toggle"><input type="checkbox" id="gpu-contrib" disabled>GPU contribution culling</label><div class="gpu-slider"><input type="range" id="gpu-contrib-px" min="0" max="1000" step="1" disabled><span id="gpu-contrib-value">-</span></div>';
   page.appendChild(panel);
   document.body.appendChild(page);
   const cell = (id) => document.getElementById("gpu-" + id);
   const note = cell("note");
   const toggle = cell("multi");
   const cullToggle = cell("cull");
+  const contribToggle = cell("contrib");
+  const contribSlider = cell("contrib-px");
+  const contribValue = cell("contrib-value");
   return {
     canvas,
     toggle,
     cullToggle,
+    contribToggle,
+    contribSlider,
+    contributionPixels() {
+      return sliderToPixels(Number(contribSlider.value));
+    },
+    setContributionPixels(px) {
+      contribSlider.value = String(pixelsToSlider(px));
+      this.showContributionPixels();
+    },
+    showContributionPixels() {
+      contribValue.textContent = this.contributionPixels().toFixed(2) + " px";
+    },
     set(id, value) {
       cell(id).textContent = value;
     },
@@ -989,6 +1052,16 @@ async function run() {
   panel.cullToggle.addEventListener("change", () => {
     viewer.renderer.culling = panel.cullToggle.checked;
   });
+  panel.contribToggle.disabled = !multiDraw;
+  panel.contribSlider.disabled = !multiDraw;
+  panel.setContributionPixels(viewer.renderer.contributionThreshold);
+  panel.contribToggle.addEventListener("change", () => {
+    viewer.renderer.contributionCulling = panel.contribToggle.checked;
+  });
+  panel.contribSlider.addEventListener("input", () => {
+    panel.showContributionPixels();
+    viewer.renderer.contributionThreshold = panel.contributionPixels();
+  });
   viewer.onFrame = (stats) => showStats(panel, stats);
   viewer.onStopped = (reason) => panel.setNote(reason, true);
   viewer.onStalled = (reason) => panel.set("fps", reason ? "paused" : "-");
@@ -1027,4 +1100,4 @@ function enableFileDrop(panel, viewer, loader) {
   });
 }
 run();
-//# sourceMappingURL=exampleWebGpuMultiDraw.adcc0ff0.js.map
+//# sourceMappingURL=exampleWebGpuMultiDraw.7093d864.js.map

@@ -55,6 +55,21 @@ export class GpuRenderer {
    */
   culling = false
 
+  /**
+   * Optional GPU contribution culling: instances whose bounding sphere projects
+   * to less than `contributionThreshold` pixels across are skipped. It shares
+   * the cull pass with frustum culling, so either flag runs the pass and the
+   * two compose. Off by default, and it needs the multi-draw extension too.
+   */
+  contributionCulling = false
+
+  /**
+   * Minimum projected diameter in pixels. The default is deliberately tiny:
+   * BIM models are full of small repeated elements, and dropping them at
+   * different distances makes an object look wrong rather than just cheaper.
+   */
+  contributionThreshold = 0.1
+
   constructor (canvas: HTMLCanvasElement, ctx: GpuContext) {
     this.canvas = canvas
     this.ctx = ctx
@@ -161,9 +176,9 @@ export class GpuRenderer {
     return this.resources ? drawCount(this.resources.scene) : 0
   }
 
-  /** True when culling is both requested and usable. */
+  /** True when either cull test is requested and the cull pass is usable. */
   get cullingActive (): boolean {
-    return this.culling && this.useMultiDraw && this.ctx.multiDraw
+    return (this.culling || this.contributionCulling) && this.useMultiDraw && this.ctx.multiDraw
   }
 
   /** Commands that survived the last cull pass, or the whole scene when culling is off. */
@@ -183,7 +198,11 @@ export class GpuRenderer {
 
     const encoder = this.ctx.device.createCommandEncoder()
     const culler = this.cullingActive ? r.culler : undefined
-    culler?.cull(encoder, viewProj)
+    culler?.cull(encoder, viewProj, {
+      frustum: this.culling,
+      minPixels: this.contributionCulling ? this.contributionThreshold : 0,
+      viewportHeight: this.height
+    })
 
     const pass = encoder.beginRenderPass({
       colorAttachments: [{

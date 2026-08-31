@@ -3,11 +3,24 @@ import * as THREE from 'three'
 import { createBuffer, createEmptyBuffer } from './gpuBuffers'
 import { cullShader } from './shaders/cullShader'
 import { writeFrustumPlanes } from './frustum'
+import { pixelsPerUnitAtUnitDepth, writeDepthPlane } from './screenSize'
 import { GpuScene, instanceCount } from './gpuScene'
 
-const CULL_UNIFORM_BYTES = 112 // six planes then a uvec4 of counts
+const CULL_UNIFORM_BYTES = 144 // six planes, a uvec4 of counts, a depth plane and the limits
+const DEPTH_PLANE_FLOAT = 28 // byte 112
+const LIMITS_FLOAT = 32 // byte 128
 const WORKGROUP_SIZE = 64
 const COUNTS_BYTES = 8 // one u32 per draw range
+
+/** What the cull pass should test this frame. */
+export type CullParams = {
+    /** Test each bounding sphere against the frustum planes. */
+    frustum: boolean;
+    /** Drop instances projecting to less than this many pixels across. Zero disables. */
+    minPixels: number;
+    /** Viewport height in device pixels, which sets the scale of `minPixels`. */
+    viewportHeight: number;
+}
 
 /** Byte offset of a range's draw counter inside the counts buffer. */
 export const OPAQUE_COUNT_OFFSET = 0
@@ -82,8 +95,12 @@ export class GpuCuller {
   }
 
   /** Records the cull pass. Call once per frame before the render pass. */
-  cull (encoder: GPUCommandEncoder, viewProj: THREE.Matrix4) {
+  cull (encoder: GPUCommandEncoder, viewProj: THREE.Matrix4, params: CullParams) {
     writeFrustumPlanes(viewProj, this.uniformData)
+    writeDepthPlane(viewProj, this.uniformData, DEPTH_PLANE_FLOAT)
+    this.info[2] = params.frustum ? 1 : 0
+    this.uniformData[LIMITS_FLOAT] = pixelsPerUnitAtUnitDepth(viewProj, params.viewportHeight)
+    this.uniformData[LIMITS_FLOAT + 1] = params.minPixels
     this.device.queue.writeBuffer(this.uniform, 0, this.uniformData)
     this.device.queue.writeBuffer(this.counts, 0, this.zeros)
 

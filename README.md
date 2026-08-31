@@ -69,6 +69,25 @@ the frustum and all 226,964 commands are still submitted. Moving the camera
 inside the bowl leaves about 36,500 of them, and the viewer runs at 85 FPS
 there.
 
+### Optional GPU contribution culling
+
+The same compute pass can also drop instances that are too small to see. Switch
+it on with the second checkbox in the demo, or `renderer.contributionCulling =
+true`, and set `renderer.contributionThreshold` to the smallest projected
+diameter, in pixels, that is still worth drawing. It uses the same bounding
+sphere as the frustum test, projected with the camera's vertical scale and the
+viewport height, and either flag on its own is enough to run the pass.
+
+The default threshold is 0.1 pixels, which is deliberately tiny. BIM models are
+full of small repeated elements in alternating patterns, such as facade panels
+or mullions. Dropping those aggressively does not make the model look simpler,
+it makes it look wrong: the pattern breaks up and the object reads as damaged
+rather than distant. A threshold near zero only removes instances that could not
+have coloured a pixel anyway. Raise it if you want the speed and can accept the
+artefacts.
+
+Both flags are off by default, so behaviour is unchanged unless you opt in.
+
 The extension is behind a flag. Launch the browser with:
 
 ```bash
