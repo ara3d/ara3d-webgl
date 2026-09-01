@@ -73,8 +73,10 @@ export class GpuRenderer {
   /**
    * Keep the opaque draw commands roughly sorted front to back, so early
    * depth testing rejects hidden fragments before they are shaded.
+   * Off by default: the CPU sort and re-upload cause a noticeable stutter
+   * on large models.
    */
-  frontToBackSort = true
+  frontToBackSort = false
 
   /** 4x multisampling. Turning it off trades edge quality for fill rate. */
   msaa = true

@@ -99,7 +99,7 @@ export function createGpuPanel () {
     '<span id="gpu-contrib-value">-</span></div>' +
     '<label class="gpu-toggle"><input type="checkbox" id="gpu-backface" checked>' +
     'Back-face culling</label>' +
-    '<label class="gpu-toggle"><input type="checkbox" id="gpu-sort" checked>' +
+    '<label class="gpu-toggle"><input type="checkbox" id="gpu-sort">' +
     'Sort draw order</label>' +
     '<div class="gpu-slider"><span class="gpu-slider-label">Move speed</span>' +
     `<input type="range" id="gpu-speed" min="${SPEED_MIN}" max="${SPEED_MAX}" step="0.5">` +
