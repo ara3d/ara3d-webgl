@@ -90,8 +90,7 @@ export class GpuViewer {
     const bounds = toCameraSpace(new THREE.Box3(
       new THREE.Vector3().fromArray(scene.boundsMin),
       new THREE.Vector3().fromArray(scene.boundsMax)))
-    const radius = Math.max(bounds.getSize(new THREE.Vector3()).length() * 0.5, 1e-3)
-    this.controls.setClipPlanes(Math.max(radius / 2000, 1e-3), radius * 50)
+    this.controls.camera.fitClipPlanes(bounds)
     this.controls.frame(bounds)
 
     console.log(`Scene has ${instanceCount(scene)} instances`)

@@ -237,6 +237,24 @@ export class Camera {
     return this.position.distanceTo(this._target)
   }
 
+  /**
+   * Fits the clip planes to the content bounds. Depth precision comes from
+   * raising the near plane with the scene size; the far plane only ever
+   * extends, so nothing that was visible gets clipped.
+   */
+  fitClipPlanes (bounds: THREE.Box3) {
+    const radius = Math.max(bounds.getSize(new THREE.Vector3()).length() * 0.5, 1e-3)
+    const perspective = this.camPerspective.camera
+    perspective.near = Math.max(radius / 2000, 1e-3)
+    perspective.far = Math.max(radius * 50, perspective.far)
+    perspective.updateProjectionMatrix()
+
+    const orthographic = this.camOrthographic.camera
+    orthographic.near = -perspective.far
+    orthographic.far = perspective.far
+    orthographic.updateProjectionMatrix()
+  }
+
   save () {
     this._lerp.cancel()
     this._savedPosition.copy(this.position)

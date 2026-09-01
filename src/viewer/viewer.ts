@@ -112,6 +112,16 @@ export class Viewer {
     if (!this.renderer.add(obj)) {
       throw new Error('Could not load object')
     }
+    this.fitCameraToContent(obj)
+  }
+
+  // Grow the tracked scene bounds with the new content and refit the clip
+  // planes, so depth precision matches the content instead of the defaults.
+  private fitCameraToContent (obj: THREE.Object3D) {
+    const bounds = new THREE.Box3().setFromObject(obj)
+    if (bounds.isEmpty()) return
+    this.camera.sceneBounds = this.camera.sceneBounds?.union(bounds) ?? bounds
+    this.camera.fitClipPlanes(this.camera.sceneBounds)
   }
 
   /** Returns the last object added via add(), if any. */
@@ -138,6 +148,7 @@ export class Viewer {
   // Clear scene content and ensure a render happens for the empty state.
   clear () {
     this._content = null
+    this.camera.sceneBounds = undefined
     this.renderer.clear()
     this.requestRender()
   }
