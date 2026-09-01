@@ -4,6 +4,8 @@ import { resolve } from 'path';
 export default defineConfig({
     base: '/ara3d-webgl/',
     root: resolve(__dirname, 'examples'),
+    // The Claude Code preview assigns a port via PORT when 5173 is taken.
+    server: { port: Number(process.env.PORT) || 5173 },
     build: {
         target: ['es2021'],
         outDir: resolve(__dirname, 'docs'),

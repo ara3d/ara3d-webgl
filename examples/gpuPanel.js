@@ -60,6 +60,7 @@ const ROWS = [
   ['drawn', 'Submitted'],
   ['meshtris', 'Mesh triangles'],
   ['tris', 'Triangles (all instances)'],
+  ['load', 'Model load'],
   ['fps', 'FPS'],
   ['cpu', 'CPU ms / frame']
 ]

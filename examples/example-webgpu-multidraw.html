@@ -48,11 +48,15 @@ async function run () {
   })
 
   panel.cullToggle.disabled = !multiDraw
+  panel.cullToggle.checked = multiDraw
+  viewer.renderer.culling = multiDraw
   panel.cullToggle.addEventListener('change', () => {
     viewer.renderer.culling = panel.cullToggle.checked
   })
 
   panel.contribToggle.disabled = !multiDraw
+  panel.contribToggle.checked = multiDraw
+  viewer.renderer.contributionCulling = multiDraw
   panel.contribSlider.disabled = !multiDraw
   panel.setContributionPixels(viewer.renderer.contributionThreshold)
   panel.contribToggle.addEventListener('change', () => {
@@ -91,9 +95,7 @@ async function run () {
   panel.setNote('Loading model...')
   // With the device, a .bfast streams into GPU buffers as it downloads.
   const loader = new GpuModelLoader({ device: viewer.context.device })
-  console.time('Loading model file')
-  const model = await loader.load(MODEL)
-  console.timeEnd('Loading model file')
+  const model = await timedLoad(panel, () => loader.load(MODEL))
 
   viewer.setScene(model.scene)
   window.gpuDemo = { viewer, model, panel }
@@ -113,6 +115,16 @@ function loadedNote (viewer, multiDraw) {
   return 'Multi-draw unavailable. ' + limited + MULTI_DRAW_HELP
 }
 
+/** Runs a model load, showing the elapsed time in the HUD and console. */
+async function timedLoad (panel, load) {
+  const start = performance.now()
+  const model = await load()
+  const seconds = (performance.now() - start) / 1000
+  panel.set('load', seconds.toFixed(2) + ' s')
+  console.log('Model loaded in', seconds.toFixed(2), 's')
+  return model
+}
+
 function enableFileDrop (panel, viewer, loader) {
   const stop = (e) => { e.preventDefault(); e.stopPropagation() }
   window.addEventListener('dragover', stop)
@@ -122,7 +134,7 @@ function enableFileDrop (panel, viewer, loader) {
     if (!file) return
     panel.setNote('Loading ' + file.name + '...')
     try {
-      const model = await loader.loadFromFile(file)
+      const model = await timedLoad(panel, () => loader.loadFromFile(file))
       viewer.setScene(model.scene)
       panel.setNote('Loaded ' + file.name + '. ' + loadedNote(viewer, viewer.context.multiDraw))
     } catch (err) {
