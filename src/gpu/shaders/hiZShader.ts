@@ -2,7 +2,8 @@
  * Builds the hierarchical depth pyramid the occlusion test reads.
  * Every level stores the FARTHEST depth of the texels it covers, so a sphere
  * whose nearest point is farther than the stored value is hidden everywhere
- * under that texel — the conservative direction for culling.
+ * under that texel — the conservative direction for culling. Depth is
+ * reversed-Z (near 1, far 0), so the farthest depth is the minimum.
  */
 
 /** Copies the depth buffer into pyramid mip 0, taking the farthest sample. */
@@ -11,8 +12,8 @@ export const hiZResolveShader = (samples: number) => {
     ? 'var src : texture_depth_multisampled_2d'
     : 'var src : texture_depth_2d'
   const load = samples > 1
-    ? `var d = 0.0;
-  for (var s = 0; s < ${samples}; s++) { d = max(d, textureLoad(src, p, s)); }`
+    ? `var d = 1.0;
+  for (var s = 0; s < ${samples}; s++) { d = min(d, textureLoad(src, p, s)); }`
     : 'let d = textureLoad(src, p, 0);'
   return /* wgsl */ `
 @group(0) @binding(0) ${src};
@@ -47,10 +48,10 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
   let xEnd = select(min(base.x + 1, ssize.x - 1), ssize.x - 1, i32(gid.x) == dsize.x - 1);
   let yEnd = select(min(base.y + 1, ssize.y - 1), ssize.y - 1, i32(gid.y) == dsize.y - 1);
 
-  var d = 0.0;
+  var d = 1.0;
   for (var y = base.y; y <= yEnd; y++) {
     for (var x = base.x; x <= xEnd; x++) {
-      d = max(d, textureLoad(src, vec2<i32>(x, y), 0).x);
+      d = min(d, textureLoad(src, vec2<i32>(x, y), 0).x);
     }
   }
   textureStore(dst, vec2<i32>(gid.xy), vec4<f32>(d, 0.0, 0.0, 0.0));

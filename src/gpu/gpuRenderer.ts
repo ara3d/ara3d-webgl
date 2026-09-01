@@ -205,10 +205,11 @@ export class GpuRenderer {
         }]
       },
       primitive: { topology: 'triangle-list', cullMode },
+      // Reversed-Z: near renders at depth 1 and far at 0, see gpuCameraView.
       depthStencil: {
-        format: 'depth24plus',
+        format: 'depth32float',
         depthWriteEnabled: !transparent,
-        depthCompare: 'less'
+        depthCompare: 'greater'
       },
       multisample: { count: samples }
     })
@@ -351,7 +352,7 @@ export class GpuRenderer {
           }],
       depthStencilAttachment: {
         view: this.depth.createView(),
-        depthClearValue: 1,
+        depthClearValue: 0,
         depthLoadOp: 'clear',
         // The pyramid build after the pass reads the depth buffer.
         depthStoreOp: occlusion ? 'store' : 'discard'
@@ -464,7 +465,7 @@ export class GpuRenderer {
     this.color = undefined
     this.depth = this.ctx.device.createTexture({
       size: [width, height],
-      format: 'depth24plus',
+      format: 'depth32float',
       sampleCount: samples,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
     })

@@ -91,10 +91,12 @@ fn occluded(sphere : vec4<f32>) -> bool {
   let c0 = clamp(vec2<i32>(lo * scale), vec2<i32>(0), lsize - 1);
   let c1 = clamp(vec2<i32>(hi * scale), vec2<i32>(0), lsize - 1);
 
-  let farthest = max(
-    max(textureLoad(pyramid, c0, li).x, textureLoad(pyramid, vec2<i32>(c1.x, c0.y), li).x),
-    max(textureLoad(pyramid, vec2<i32>(c0.x, c1.y), li).x, textureLoad(pyramid, c1, li).x));
-  return clamp(minN.z, 0.0, 1.0) > farthest;
+  // Reversed-Z: far is 0 and near is 1, so the farthest occluder depth is
+  // the minimum, and the sphere's nearest point is its largest ndc z.
+  let farthest = min(
+    min(textureLoad(pyramid, c0, li).x, textureLoad(pyramid, vec2<i32>(c1.x, c0.y), li).x),
+    min(textureLoad(pyramid, vec2<i32>(c0.x, c1.y), li).x, textureLoad(pyramid, c1, li).x));
+  return clamp(maxN.z, 0.0, 1.0) < farthest;
 }
 
 /// True when any enabled test rejects the sphere.
