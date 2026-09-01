@@ -7,9 +7,13 @@ import { DRAW_COMMAND_WORDS, DrawRange, GpuScene, drawCount } from './gpuScene'
 import { selectLargestDraws } from './fallbackDraws'
 import { GpuVertices } from './gpuVertices'
 import { GpuCuller, OPAQUE_COUNT_OFFSET, TRANSPARENT_COUNT_OFFSET } from './gpuCuller'
+import { sortDrawsFrontToBack } from './drawOrder'
 
 const CAMERA_BYTES = 96 // mat4 + eye vec4 + params vec4
-const SAMPLE_COUNT = 4
+const MSAA_SAMPLES = 4
+const SORT_INTERVAL_MS = 1000
+/** Eye movement below this fraction of the scene diagonal skips re-sorting. */
+const SORT_MOVE_FRACTION = 0.01
 
 /** The two pipelines a vertex layout needs, kept so scenes of one format share them. */
 type ScenePipelines = {
@@ -28,7 +32,6 @@ type SceneResources = {
     fallback?: { indirect: GPUBuffer; opaque: DrawRange; transparent: DrawRange };
     bindGroup: GPUBindGroup;
     culler: GpuCuller;
-    pipelines: ScenePipelines;
 }
 
 /**
@@ -53,6 +56,9 @@ export class GpuRenderer {
   private color: GPUTexture | undefined
   private width = 0
   private height = 0
+  private samples = 0
+  private lastSortTime = 0
+  private readonly lastSortEye = new THREE.Vector3(Infinity, Infinity, Infinity)
 
   /** Set false to compare against the one-call-per-draw path. */
   useMultiDraw: boolean
@@ -136,12 +142,19 @@ export class GpuRenderer {
     })
   }
 
+  /** Multisample count the current `msaa` flag asks for. */
+  private get sampleCount (): number { return this.msaa ? MSAA_SAMPLES : 1 }
+
   /**
-   * Pipelines depend on the scene's vertex layout, so they are built on first
-   * use and reused by every later scene with the same layout.
+   * Pipelines depend on the scene's vertex layout plus the cull and MSAA
+   * flags, so they are built on first use and reused by every later frame
+   * with the same combination. Looked up each frame, so toggling a flag
+   * takes effect on the next frame without rebuilding the scene.
    */
   private getPipelines (vertices: GpuVertices): ScenePipelines {
-    const key = pipelineKey(vertices)
+    const cullMode: GPUCullMode = this.backFaceCulling ? 'back' : 'none'
+    const samples = this.sampleCount
+    const key = pipelineKey(vertices) + '|' + cullMode + '|' + samples
     const cached = this.pipelineCache.get(key)
     if (cached) return cached
 
@@ -150,8 +163,8 @@ export class GpuRenderer {
       code: sceneShader(vertices.format)
     })
     const pipelines = {
-      opaque: this.createPipeline(module, vertices, false),
-      transparent: this.createPipeline(module, vertices, true)
+      opaque: this.createPipeline(module, vertices, false, cullMode, samples),
+      transparent: this.createPipeline(module, vertices, true, cullMode, samples)
     }
     this.pipelineCache.set(key, pipelines)
     return pipelines
@@ -160,7 +173,9 @@ export class GpuRenderer {
   private createPipeline (
     module: GPUShaderModule,
     vertices: GpuVertices,
-    transparent: boolean
+    transparent: boolean,
+    cullMode: GPUCullMode,
+    samples: number
   ): GPURenderPipeline {
     return this.ctx.device.createRenderPipeline({
       label: transparent ? 'transparent' : 'opaque',
@@ -178,13 +193,13 @@ export class GpuRenderer {
           blend: transparent ? BLEND_OVER : undefined
         }]
       },
-      primitive: { topology: 'triangle-list', cullMode: 'none' },
+      primitive: { topology: 'triangle-list', cullMode },
       depthStencil: {
         format: 'depth24plus',
         depthWriteEnabled: !transparent,
         depthCompare: 'less'
       },
-      multisample: { count: SAMPLE_COUNT }
+      multisample: { count: samples }
     })
   }
 
@@ -223,9 +238,10 @@ export class GpuRenderer {
       indirect,
       fallback: this.createFallback(scene),
       bindGroup,
-      culler,
-      pipelines: this.getPipelines(scene.vertices)
+      culler
     }
+    this.lastSortTime = 0
+    this.lastSortEye.set(Infinity, Infinity, Infinity)
     console.timeEnd('Uploading GPU buffers')
   }
 
@@ -269,6 +285,7 @@ export class GpuRenderer {
 
     this.resize()
     this.updateCamera(viewProj, eye, r.scene.vertices.scale)
+    if (this.frontToBackSort) this.sortOpaqueDraws(eye)
 
     const encoder = this.ctx.device.createCommandEncoder()
     const culler = this.cullingActive ? r.culler : undefined
@@ -278,14 +295,23 @@ export class GpuRenderer {
       viewportHeight: Math.max(1, this.canvas.clientHeight)
     })
 
+    const target = this.context.getCurrentTexture().createView()
+    const clearValue = { r: 0.09, g: 0.1, b: 0.12, a: 1 }
     const pass = encoder.beginRenderPass({
-      colorAttachments: [{
-        view: this.color.createView(),
-        resolveTarget: this.context.getCurrentTexture().createView(),
-        clearValue: { r: 0.09, g: 0.1, b: 0.12, a: 1 },
-        loadOp: 'clear',
-        storeOp: 'discard'
-      }],
+      colorAttachments: [this.color
+        ? {
+            view: this.color.createView(),
+            resolveTarget: target,
+            clearValue,
+            loadOp: 'clear',
+            storeOp: 'discard'
+          }
+        : {
+            view: target,
+            clearValue,
+            loadOp: 'clear',
+            storeOp: 'store'
+          }],
       depthStencilAttachment: {
         view: this.depth.createView(),
         depthClearValue: 1,
@@ -294,6 +320,7 @@ export class GpuRenderer {
       }
     })
 
+    const pipelines = this.getPipelines(r.scene.vertices)
     pass.setBindGroup(0, r.bindGroup)
     r.vertexBuffers.forEach((b, i) => pass.setVertexBuffer(i, b))
     pass.setIndexBuffer(r.indices, 'uint32')
@@ -302,10 +329,10 @@ export class GpuRenderer {
     const ranges = fallback ?? r.scene
     const indirect = culler ? culler.visible : fallback ? fallback.indirect : r.indirect
 
-    pass.setPipeline(r.pipelines.opaque)
+    pass.setPipeline(pipelines.opaque)
     this.drawRange(pass, indirect, ranges.opaque, culler?.counts, OPAQUE_COUNT_OFFSET)
 
-    pass.setPipeline(r.pipelines.transparent)
+    pass.setPipeline(pipelines.transparent)
     this.drawRange(pass, indirect, ranges.transparent, culler?.counts, TRANSPARENT_COUNT_OFFSET)
 
     pass.end()
@@ -336,6 +363,39 @@ export class GpuRenderer {
     }
   }
 
+  /**
+   * Keeps the opaque draw commands roughly front to back: at most once per
+   * second, and only after the eye has moved a meaningful fraction of the
+   * scene size. Skipped on the fallback path, whose reduced command buffer
+   * is not the sorted one.
+   */
+  private sortOpaqueDraws (eye: THREE.Vector3) {
+    const r = this.resources
+    if (!r || this.fallbackActive) return
+
+    const now = performance.now()
+    if (now - this.lastSortTime < SORT_INTERVAL_MS) return
+
+    const scene = r.scene
+    const diagonal = Math.hypot(
+      scene.boundsMax[0] - scene.boundsMin[0],
+      scene.boundsMax[1] - scene.boundsMin[1],
+      scene.boundsMax[2] - scene.boundsMin[2])
+    if (this.lastSortEye.distanceTo(eye) < diagonal * SORT_MOVE_FRACTION) return
+
+    this.lastSortTime = now
+    this.lastSortEye.copy(eye)
+    const changed = sortDrawsFrontToBack(
+      scene.drawCommands, scene.instanceSpheres, scene.instanceIds, scene.opaque, eye)
+    if (!changed) return
+
+    // Commands and spheres are parallel arrays the cull shader indexes
+    // together, so both permuted copies go back up in the same frame.
+    const c = scene.drawCommands
+    this.ctx.device.queue.writeBuffer(r.indirect, 0, c.buffer, c.byteOffset, c.byteLength)
+    r.culler.writeSpheres(scene.instanceSpheres)
+  }
+
   private updateCamera (viewProj: THREE.Matrix4, eye: THREE.Vector3, vertexScale: number) {
     this.cameraData.set(viewProj.elements, 0)
     this.cameraData[16] = eye.x
@@ -345,32 +405,40 @@ export class GpuRenderer {
     this.ctx.device.queue.writeBuffer(this.cameraBuffer, 0, this.cameraData)
   }
 
-  /** Matches the drawing buffer and render targets to the canvas' CSS size. */
+  /** Matches the render targets to the canvas' CSS size and the MSAA flag. */
   private resize () {
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     const width = Math.max(1, Math.floor(this.canvas.clientWidth * dpr))
     const height = Math.max(1, Math.floor(this.canvas.clientHeight * dpr))
-    if (width === this.width && height === this.height && this.depth) return
+    const samples = this.sampleCount
+    if (width === this.width && height === this.height &&
+        samples === this.samples && this.depth) return
 
     this.width = width
     this.height = height
+    this.samples = samples
     this.canvas.width = width
     this.canvas.height = height
 
     this.depth?.destroy()
     this.color?.destroy()
+    this.color = undefined
     this.depth = this.ctx.device.createTexture({
       size: [width, height],
       format: 'depth24plus',
-      sampleCount: SAMPLE_COUNT,
+      sampleCount: samples,
       usage: GPUTextureUsage.RENDER_ATTACHMENT
     })
-    this.color = this.ctx.device.createTexture({
-      size: [width, height],
-      format: this.format,
-      sampleCount: SAMPLE_COUNT,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT
-    })
+    // Without MSAA the pass renders straight into the swapchain texture,
+    // so no separate color target exists.
+    if (samples > 1) {
+      this.color = this.ctx.device.createTexture({
+        size: [width, height],
+        format: this.format,
+        sampleCount: samples,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT
+      })
+    }
   }
 
   get aspect (): number { return this.width / Math.max(this.height, 1) }

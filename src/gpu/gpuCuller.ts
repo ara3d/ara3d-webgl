@@ -94,6 +94,15 @@ export class GpuCuller {
     })
   }
 
+  /**
+   * Re-uploads the bounding spheres after the caller permutes them, keeping
+   * them parallel to the draw commands the cull shader indexes alongside.
+   */
+  writeSpheres (spheres: Float32Array) {
+    this.device.queue.writeBuffer(
+      this.spheres, 0, spheres.buffer, spheres.byteOffset, spheres.byteLength)
+  }
+
   /** Records the cull pass. Call once per frame before the render pass. */
   cull (encoder: GPUCommandEncoder, viewProj: THREE.Matrix4, params: CullParams) {
     writeFrustumPlanes(viewProj, this.uniformData)
