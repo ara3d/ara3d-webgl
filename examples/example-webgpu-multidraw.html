@@ -68,7 +68,8 @@ async function run () {
   })
 
   panel.occlusionToggle.disabled = !multiDraw
-  panel.occlusionToggle.checked = viewer.renderer.occlusionCulling
+  panel.occlusionToggle.checked = multiDraw
+  viewer.renderer.occlusionCulling = multiDraw
   panel.occlusionToggle.addEventListener('change', () => {
     viewer.renderer.occlusionCulling = panel.occlusionToggle.checked
   })
@@ -78,7 +79,8 @@ async function run () {
     viewer.renderer.backFaceCulling = panel.backFaceToggle.checked
   })
 
-  panel.sortToggle.checked = viewer.renderer.frontToBackSort
+  panel.sortToggle.checked = true
+  viewer.renderer.frontToBackSort = true
   panel.sortToggle.addEventListener('change', () => {
     viewer.renderer.frontToBackSort = panel.sortToggle.checked
   })
