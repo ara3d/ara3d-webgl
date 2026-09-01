@@ -4,48 +4,11 @@ var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
   return value;
 };
-import { r as Matrix4, a as Vector3, eX as Quaternion, g3 as JSZip, l as loadBimGeometryFromZip, F as Frustum, fX as WebGPUCoordinateSystem, P as PerspectiveCamera } from "./bimOpenSchemaLoader.1c0420b7.js";
-const MULTI_DRAW_FEATURE = "chromium-experimental-multi-draw-indirect";
-const FIRST_INSTANCE_FEATURE = "indirect-first-instance";
-function isWebGpuAvailable() {
-  return typeof navigator !== "undefined" && !!navigator.gpu;
-}
-async function requestGpuContext() {
-  if (!isWebGpuAvailable()) {
-    throw new Error("WebGPU is not available in this browser.");
-  }
-  const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
-  if (!adapter) {
-    throw new Error("No WebGPU adapter found.");
-  }
-  if (!adapter.features.has(FIRST_INSTANCE_FEATURE)) {
-    throw new Error(
-      'This adapter does not support "indirect-first-instance", which indirect drawing needs here.'
-    );
-  }
-  const multiDraw = adapter.features.has(MULTI_DRAW_FEATURE);
-  const requiredFeatures = [FIRST_INSTANCE_FEATURE];
-  if (multiDraw)
-    requiredFeatures.push(MULTI_DRAW_FEATURE);
-  const device = await adapter.requestDevice({ requiredFeatures });
-  device.addEventListener("uncapturederror", (e) => console.error("WebGPU:", e.error?.message));
-  const lost = device.lost.then((info) => {
-    console.error("WebGPU device lost:", info.reason, info.message);
-    return info;
-  });
-  return { adapter, device, multiDraw, adapterInfo: describeAdapter(adapter), lost };
-}
-function describeAdapter(adapter) {
-  const info = adapter.info;
-  if (!info)
-    return "unknown adapter";
-  return [info.vendor, info.architecture, info.device, info.description].filter((s) => !!s).join(" ");
-}
-const MULTI_DRAW_HELP = "Launch Chrome or Edge with --enable-dawn-features=multi_draw_indirect and --enable-unsafe-webgpu.";
-const DRAW_COMMAND_WORDS = 5;
-const INSTANCE_FLOATS = 20;
-const drawCount = (s) => s.drawCommands.length / DRAW_COMMAND_WORDS;
-const instanceCount = (s) => s.instanceIds.length;
+import "./modulepreload-polyfill.c7c6310f.js";
+import { c as columnVertices, a as cpuBytes, I as INSTANCE_FLOATS, D as DRAW_COMMAND_WORDS, b as buildGpuSceneFromTables, i as interleavedVertices, g as gpuBytes, d as buildGpuSceneFromModel, e as instanceCount, f as drawCount, r as requestGpuContext, h as isWebGpuAvailable, M as MULTI_DRAW_HELP } from "./buildGpuSceneFromModel.4980941e.js";
+import { s as Matrix4, a as Vector3, e_ as Quaternion, gb as JSZip, l as loadBimGeometryFromZip, F as Frustum, f_ as WebGPUCoordinateSystem, cJ as Box3 } from "./bimOpenSchemaLoader.69b9fd7e.js";
+import { s as readRenderModelTables, R as RENDER_MODEL_BUFFERS, i as isBFast, d as readBFast, q as isRenderModel, t as readRenderModel, b as BFAST_HEADER_PROBE } from "./renderModel.76ea7852.js";
+import { B as BFastStreamReader, m as memorySink, C as CameraControls } from "./bfastStream.5fe1e8fa.js";
 function computeMeshSpheres(bg, vertexScale) {
   const { VertexX, VertexY, VertexZ, MeshVertexOffset } = bg;
   const meshCount = MeshVertexOffset.length;
@@ -158,11 +121,8 @@ function buildGpuScene(bg) {
   }
   const opaqueCount = countOpaque(instanceData, n);
   const scene = {
-    vertexX: bg.VertexX,
-    vertexY: bg.VertexY,
-    vertexZ: bg.VertexZ,
-    vertexScale,
-    indices: new Uint32Array(bg.IndexBuffer.buffer, bg.IndexBuffer.byteOffset, totalIndices),
+    vertices: columnVertices(bg.VertexX, bg.VertexY, bg.VertexZ, vertexScale),
+    indices: cpuBytes(new Uint32Array(bg.IndexBuffer.buffer, bg.IndexBuffer.byteOffset, totalIndices)),
     instanceData,
     instanceSpheres,
     instanceIds,
@@ -206,22 +166,38 @@ const countOpaque = (instanceData, n) => {
     count++;
   return count;
 };
-class BosGpuLoader {
-  async load(source) {
-    const response = await fetch(source);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch BOS from ${source}: ${response.status} ${response.statusText}`);
+function gpuBufferSink(device, buffer) {
+  let at = 0;
+  let carry = new Uint8Array(0);
+  return {
+    write(bytes, offset) {
+      if (offset !== at + carry.length) {
+        throw new Error(`GPU sink expected offset ${at + carry.length} but got ${offset}.`);
+      }
+      let data = bytes;
+      if (carry.length) {
+        const joined = new Uint8Array(carry.length + bytes.length);
+        joined.set(carry);
+        joined.set(bytes, carry.length);
+        data = joined;
+      }
+      const whole = data.length & ~3;
+      carry = data.slice(whole);
+      if (whole === 0)
+        return;
+      device.queue.writeBuffer(buffer, at, data.buffer, data.byteOffset, whole);
+      at += whole;
+    },
+    end() {
+      if (carry.length === 0)
+        return;
+      const padded = new Uint8Array(4);
+      padded.set(carry);
+      device.queue.writeBuffer(buffer, at, padded);
+      at += carry.length;
+      carry = new Uint8Array(0);
     }
-    return this.loadFromArrayBuffer(await response.arrayBuffer());
-  }
-  async loadFromFile(file) {
-    return this.loadFromArrayBuffer(await file.arrayBuffer());
-  }
-  async loadFromArrayBuffer(buffer) {
-    const zip = await JSZip.loadAsync(buffer);
-    const bim = await loadBimGeometryFromZip(zip);
-    return { bim, scene: buildGpuScene(bim.BimGeometry) };
-  }
+  };
 }
 function createBuffer(device, data, usage, label) {
   const buffer = device.createBuffer({
@@ -234,6 +210,164 @@ function createBuffer(device, data, usage, label) {
 }
 const createEmptyBuffer = (device, size, usage, label) => device.createBuffer({ label, size: align4(size), usage });
 const align4 = (n) => n + 3 & ~3;
+const toGpuBuffer = (device, bytes, usage, label) => bytes.kind === "gpu" ? bytes.gpuBuffer : createBuffer(device, bytes.data, usage, label);
+async function streamGpuScene(device, chunks) {
+  const B = RENDER_MODEL_BUFFERS;
+  const usage = {
+    [B.vertices]: GPUBufferUsage.VERTEX,
+    [B.indices]: GPUBufferUsage.INDEX
+  };
+  const uploaded = /* @__PURE__ */ new Map();
+  const tables = /* @__PURE__ */ new Map();
+  const sinkFor = (range) => {
+    const size = range.end - range.begin;
+    const geometry = usage[range.name];
+    if (geometry !== void 0) {
+      const buffer = device.createBuffer({
+        label: range.name,
+        size: align4(size),
+        usage: geometry | GPUBufferUsage.COPY_DST
+      });
+      uploaded.set(range.name, { buffer, byteLength: size });
+      return gpuBufferSink(device, buffer);
+    }
+    const bytes = new Uint8Array(size);
+    tables.set(range.name, bytes);
+    return memorySink(bytes);
+  };
+  const reader = new BFastStreamReader(sinkFor);
+  try {
+    for await (const chunk of chunks)
+      reader.push(chunk);
+    reader.end();
+    const model = readRenderModelTables((name) => {
+      const bytes = tables.get(name);
+      if (!bytes) {
+        throw new Error(
+          `The stream has no buffer named "${name}". Found: ${found(reader.ranges)}`
+        );
+      }
+      return bytes;
+    });
+    const vertices = need(uploaded, B.vertices, reader.ranges);
+    const indices = need(uploaded, B.indices, reader.ranges);
+    return buildGpuSceneFromTables(
+      model,
+      interleavedVertices(gpuBytes(vertices.buffer, vertices.byteLength), model.floatsPerVertex),
+      gpuBytes(indices.buffer, indices.byteLength)
+    );
+  } catch (e) {
+    for (const { buffer } of uploaded.values())
+      buffer.destroy();
+    throw e;
+  }
+}
+const found = (ranges) => ranges ? ranges.map((r) => r.name).join(", ") : "nothing, the header was never read";
+function need(uploaded, name, ranges) {
+  const found_ = uploaded.get(name);
+  if (!found_) {
+    throw new Error(`The stream has no buffer named "${name}". Found: ${found(ranges)}`);
+  }
+  return found_;
+}
+async function* streamChunks(reader, prefix = []) {
+  for (const p of prefix)
+    yield p;
+  for (; ; ) {
+    const { done, value } = await reader.read();
+    if (done)
+      return;
+    if (value)
+      yield value;
+  }
+}
+class GpuModelLoader {
+  constructor(options = {}) {
+    __publicField(this, "options");
+    this.options = options;
+  }
+  async load(source) {
+    const response = await fetch(source);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch model from ${source}: ${response.status} ${response.statusText}`);
+    }
+    const device = this.options.device;
+    if (device && response.body) {
+      return await loadFromStream(device, response.body.getReader());
+    }
+    return this.loadFromArrayBuffer(await response.arrayBuffer());
+  }
+  async loadFromFile(file) {
+    const device = this.options.device;
+    if (device && typeof file.stream === "function") {
+      return await loadFromStream(device, file.stream().getReader());
+    }
+    return this.loadFromArrayBuffer(await file.arrayBuffer());
+  }
+  async loadFromArrayBuffer(buffer) {
+    return isBFast(buffer) ? { scene: loadBFastScene(buffer) } : await loadBosModel(buffer);
+  }
+}
+async function loadFromStream(device, reader) {
+  const { chunks, bytes, done } = await readAtLeast(reader, BFAST_HEADER_PROBE);
+  const head = concat(chunks, bytes);
+  if (isBFast(head.buffer, head.byteOffset)) {
+    return { scene: await streamGpuScene(device, streamChunks(reader, [head])) };
+  }
+  const rest = done ? [] : (await readAll(reader)).chunks;
+  const whole = concat([head, ...rest], bytes + total(rest));
+  return await loadBosModel(whole.buffer);
+}
+async function readAtLeast(reader, wanted) {
+  const chunks = [];
+  let bytes = 0;
+  while (bytes < wanted) {
+    const { done, value } = await reader.read();
+    if (done)
+      return { chunks, bytes, done: true };
+    if (value) {
+      chunks.push(value);
+      bytes += value.length;
+    }
+  }
+  return { chunks, bytes, done: false };
+}
+async function readAll(reader) {
+  const chunks = [];
+  for (; ; ) {
+    const { done, value } = await reader.read();
+    if (done)
+      return { chunks };
+    if (value)
+      chunks.push(value);
+  }
+}
+const total = (chunks) => chunks.reduce((n, c) => n + c.length, 0);
+const concat = (chunks, bytes) => {
+  const out = new Uint8Array(bytes);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out;
+};
+function loadBFastScene(buffer) {
+  const bfast = readBFast(buffer);
+  if (!isRenderModel(bfast)) {
+    throw new Error(
+      `This BFAST is not a render model. It contains: ${bfast.names.join(", ")}`
+    );
+  }
+  return buildGpuSceneFromModel(readRenderModel(bfast));
+}
+async function loadBosModel(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const bim = await loadBimGeometryFromZip(zip);
+  return { bim, scene: buildGpuScene(bim.BimGeometry) };
+}
+const GPU_MODEL_EXTENSIONS = [".bos", ".bfast"];
+const isGpuModelFile = (name) => GPU_MODEL_EXTENSIONS.some((e) => name.toLowerCase().endsWith(e));
 const cullShader = `
 struct Cull {
   planes : array<vec4<f32>, 6>,
@@ -421,7 +555,50 @@ class GpuCuller {
     }
   }
 }
-const sceneShader = `
+function selectLargestDraws(scene, limit) {
+  const n = drawCount(scene);
+  if (n <= limit) {
+    return { commands: scene.drawCommands, opaque: scene.opaque, transparent: scene.transparent };
+  }
+  const radius = (slot) => scene.instanceSpheres[slot * 4 + 3];
+  const threshold = radiusThreshold(scene, n, limit);
+  const selected = [];
+  for (let slot = 0; slot < n; slot++) {
+    if (radius(slot) > threshold)
+      selected.push(slot);
+  }
+  for (let slot = 0; slot < n && selected.length < limit; slot++) {
+    if (radius(slot) === threshold)
+      selected.push(slot);
+  }
+  selected.sort((a, b) => a - b);
+  const commands = new Uint32Array(selected.length * DRAW_COMMAND_WORDS);
+  for (let i = 0; i < selected.length; i++) {
+    const from = selected[i] * DRAW_COMMAND_WORDS;
+    for (let w = 0; w < DRAW_COMMAND_WORDS; w++) {
+      commands[i * DRAW_COMMAND_WORDS + w] = scene.drawCommands[from + w];
+    }
+  }
+  const firstTransparent = scene.transparent.first;
+  let opaqueCount = 0;
+  while (opaqueCount < selected.length && selected[opaqueCount] < firstTransparent)
+    opaqueCount++;
+  return {
+    commands,
+    opaque: { first: 0, count: opaqueCount },
+    transparent: { first: opaqueCount, count: selected.length - opaqueCount }
+  };
+}
+function radiusThreshold(scene, n, limit) {
+  const radii = new Float32Array(n);
+  for (let slot = 0; slot < n; slot++)
+    radii[slot] = scene.instanceSpheres[slot * 4 + 3];
+  radii.sort();
+  return radii[n - limit];
+}
+const sceneShader = (format) => {
+  const t = format === "sint32" ? "i32" : "f32";
+  return `
 struct Camera {
   viewProj : mat4x4<f32>,
   eye      : vec4<f32>,
@@ -445,9 +622,9 @@ struct VsOut {
 @vertex
 fn vs(
   @builtin(instance_index) id : u32,
-  @location(0) x : i32,
-  @location(1) y : i32,
-  @location(2) z : i32
+  @location(0) x : ${t},
+  @location(1) y : ${t},
+  @location(2) z : ${t}
 ) -> VsOut {
   let inst = instances[id];
   let local = vec3<f32>(f32(x), f32(y), f32(z)) * camera.params.x;
@@ -478,6 +655,7 @@ fn fs(in : VsOut) -> @location(0) vec4<f32> {
   return vec4<f32>(lit, in.color.a);
 }
 `;
+};
 const CAMERA_BYTES = 96;
 const SAMPLE_COUNT = 4;
 class GpuRenderer {
@@ -489,8 +667,7 @@ class GpuRenderer {
     __publicField(this, "cameraBuffer");
     __publicField(this, "cameraData", new Float32Array(CAMERA_BYTES / 4));
     __publicField(this, "layout");
-    __publicField(this, "opaquePipeline");
-    __publicField(this, "transparentPipeline");
+    __publicField(this, "pipelineCache", /* @__PURE__ */ new Map());
     __publicField(this, "resources");
     __publicField(this, "depth");
     __publicField(this, "color");
@@ -500,6 +677,7 @@ class GpuRenderer {
     __publicField(this, "culling", false);
     __publicField(this, "contributionCulling", false);
     __publicField(this, "contributionThreshold", 0.1);
+    __publicField(this, "maxFallbackDraws", 5e4);
     this.canvas = canvas;
     this.ctx = ctx;
     this.useMultiDraw = ctx.multiDraw;
@@ -528,22 +706,31 @@ class GpuRenderer {
         }
       ]
     });
-    const module = ctx.device.createShaderModule({ label: "scene", code: sceneShader });
-    this.opaquePipeline = this.createPipeline(module, false);
-    this.transparentPipeline = this.createPipeline(module, true);
   }
-  createPipeline(module, transparent) {
-    const column = (shaderLocation) => ({
-      arrayStride: 4,
-      attributes: [{ shaderLocation, offset: 0, format: "sint32" }]
+  getPipelines(vertices) {
+    const key = pipelineKey(vertices);
+    const cached = this.pipelineCache.get(key);
+    if (cached)
+      return cached;
+    const module = this.ctx.device.createShaderModule({
+      label: "scene",
+      code: sceneShader(vertices.format)
     });
+    const pipelines = {
+      opaque: this.createPipeline(module, vertices, false),
+      transparent: this.createPipeline(module, vertices, true)
+    };
+    this.pipelineCache.set(key, pipelines);
+    return pipelines;
+  }
+  createPipeline(module, vertices, transparent) {
     return this.ctx.device.createRenderPipeline({
       label: transparent ? "transparent" : "opaque",
       layout: this.ctx.device.createPipelineLayout({ bindGroupLayouts: [this.layout] }),
       vertex: {
         module,
         entryPoint: "vs",
-        buffers: [column(0), column(1), column(2)]
+        buffers: vertexLayouts(vertices)
       },
       fragment: {
         module,
@@ -566,10 +753,8 @@ class GpuRenderer {
     console.time("Uploading GPU buffers");
     const device = this.ctx.device;
     this.releaseScene();
-    const vertexX = createBuffer(device, scene.vertexX, GPUBufferUsage.VERTEX, "vertexX");
-    const vertexY = createBuffer(device, scene.vertexY, GPUBufferUsage.VERTEX, "vertexY");
-    const vertexZ = createBuffer(device, scene.vertexZ, GPUBufferUsage.VERTEX, "vertexZ");
-    const indices = createBuffer(device, scene.indices, GPUBufferUsage.INDEX, "indices");
+    const vertexBuffers = scene.vertices.buffers.map((b, i) => toGpuBuffer(device, b.bytes, GPUBufferUsage.VERTEX, `vertices${i}`));
+    const indices = toGpuBuffer(device, scene.indices, GPUBufferUsage.INDEX, "indices");
     const instances = createBuffer(device, scene.instanceData, GPUBufferUsage.STORAGE, "instances");
     const indirect = createBuffer(
       device,
@@ -587,19 +772,34 @@ class GpuRenderer {
     const culler = new GpuCuller(device, scene, indirect);
     this.resources = {
       scene,
-      vertexX,
-      vertexY,
-      vertexZ,
+      vertexBuffers,
       indices,
       instances,
       indirect,
+      fallback: this.createFallback(scene),
       bindGroup,
-      culler
+      culler,
+      pipelines: this.getPipelines(scene.vertices)
     };
     console.timeEnd("Uploading GPU buffers");
   }
+  createFallback(scene) {
+    if (drawCount(scene) <= this.maxFallbackDraws)
+      return void 0;
+    const draws = selectLargestDraws(scene, this.maxFallbackDraws);
+    const indirect = createBuffer(
+      this.ctx.device,
+      draws.commands,
+      GPUBufferUsage.INDIRECT,
+      "indirect fallback"
+    );
+    return { indirect, opaque: draws.opaque, transparent: draws.transparent };
+  }
   get drawCount() {
     return this.resources ? drawCount(this.resources.scene) : 0;
+  }
+  get fallbackActive() {
+    return !!this.resources?.fallback && !(this.useMultiDraw && this.ctx.multiDraw);
   }
   get cullingActive() {
     return (this.culling || this.contributionCulling) && this.useMultiDraw && this.ctx.multiDraw;
@@ -607,6 +807,9 @@ class GpuRenderer {
   get drawnCount() {
     if (!this.resources)
       return 0;
+    const fallback = this.fallbackActive ? this.resources.fallback : void 0;
+    if (fallback)
+      return fallback.opaque.count + fallback.transparent.count;
     if (!this.cullingActive)
       return this.drawCount;
     const [opaque, transparent] = this.resources.culler.drawnCounts;
@@ -617,7 +820,7 @@ class GpuRenderer {
     if (!r)
       return;
     this.resize();
-    this.updateCamera(viewProj, eye, r.scene.vertexScale);
+    this.updateCamera(viewProj, eye, r.scene.vertices.scale);
     const encoder = this.ctx.device.createCommandEncoder();
     const culler = this.cullingActive ? r.culler : void 0;
     culler?.cull(encoder, viewProj, {
@@ -641,15 +844,15 @@ class GpuRenderer {
       }
     });
     pass.setBindGroup(0, r.bindGroup);
-    pass.setVertexBuffer(0, r.vertexX);
-    pass.setVertexBuffer(1, r.vertexY);
-    pass.setVertexBuffer(2, r.vertexZ);
+    r.vertexBuffers.forEach((b, i) => pass.setVertexBuffer(i, b));
     pass.setIndexBuffer(r.indices, "uint32");
-    const indirect = culler ? culler.visible : r.indirect;
-    pass.setPipeline(this.opaquePipeline);
-    this.drawRange(pass, indirect, r.scene.opaque, culler?.counts, OPAQUE_COUNT_OFFSET);
-    pass.setPipeline(this.transparentPipeline);
-    this.drawRange(pass, indirect, r.scene.transparent, culler?.counts, TRANSPARENT_COUNT_OFFSET);
+    const fallback = this.fallbackActive ? r.fallback : void 0;
+    const ranges = fallback ?? r.scene;
+    const indirect = culler ? culler.visible : fallback ? fallback.indirect : r.indirect;
+    pass.setPipeline(r.pipelines.opaque);
+    this.drawRange(pass, indirect, ranges.opaque, culler?.counts, OPAQUE_COUNT_OFFSET);
+    pass.setPipeline(r.pipelines.transparent);
+    this.drawRange(pass, indirect, ranges.transparent, culler?.counts, TRANSPARENT_COUNT_OFFSET);
     pass.end();
     this.ctx.device.queue.submit([encoder.finish()]);
     culler?.pollCounts();
@@ -708,9 +911,11 @@ class GpuRenderer {
     if (!r)
       return;
     r.culler.dispose();
-    for (const b of [r.vertexX, r.vertexY, r.vertexZ, r.indices, r.instances, r.indirect]) {
+    const owned = [...r.vertexBuffers, r.indices, r.instances, r.indirect];
+    if (r.fallback)
+      owned.push(r.fallback.indirect);
+    for (const b of owned)
       b.destroy();
-    }
     this.resources = void 0;
   }
   dispose() {
@@ -720,135 +925,52 @@ class GpuRenderer {
     this.cameraBuffer.destroy();
   }
 }
+const vertexLayouts = (v) => v.buffers.map((b) => ({
+  arrayStride: b.stride,
+  attributes: b.attributes.map((a) => ({ ...a, format: v.format }))
+}));
+const pipelineKey = (v) => v.format + "|" + JSON.stringify(v.buffers.map((b) => [b.stride, b.attributes]));
 const BLEND_OVER = {
   color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
   alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" }
 };
-class OrbitCamera {
-  constructor() {
-    __publicField(this, "camera", new PerspectiveCamera(50, 1, 0.05, 1e4));
-    __publicField(this, "target", new Vector3());
-    __publicField(this, "distance", 10);
-    __publicField(this, "azimuth", Math.PI * 0.25);
-    __publicField(this, "elevation", Math.PI * 0.2);
-    __publicField(this, "viewProj", new Matrix4());
-    this.camera.up.set(0, 0, 1);
-    this.camera.coordinateSystem = WebGPUCoordinateSystem;
-  }
-  frame(min, max) {
-    this.target.addVectors(min, max).multiplyScalar(0.5);
-    const radius = Math.max(min.distanceTo(max) * 0.5, 1e-3);
-    this.distance = radius / Math.tan(this.camera.fov * Math.PI / 360);
-    this.camera.near = Math.max(this.distance / 5e3, 0.01);
-    this.camera.far = this.distance * 20;
-    this.update();
-  }
-  setAspect(aspect) {
-    this.camera.aspect = aspect;
-    this.update();
-  }
-  orbit(dx, dy) {
-    const limit = Math.PI / 2 - 0.01;
-    this.azimuth -= dx;
-    this.elevation = clamp(this.elevation + dy, -limit, limit);
-    this.update();
-  }
-  pan(dx, dy) {
-    const scale = this.distance * 1e-3;
-    const right = new Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
-    const up = new Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
-    this.target.addScaledVector(right, -dx * scale).addScaledVector(up, dy * scale);
-    this.update();
-  }
-  zoom(delta) {
-    this.distance = clamp(this.distance * Math.exp(delta * 1e-3), 0.01, 1e6);
-    this.update();
-  }
-  update() {
-    const cosE = Math.cos(this.elevation);
-    this.camera.position.set(
-      this.target.x + this.distance * cosE * Math.cos(this.azimuth),
-      this.target.y + this.distance * cosE * Math.sin(this.azimuth),
-      this.target.z + this.distance * Math.sin(this.elevation)
-    );
-    this.camera.lookAt(this.target);
-    this.camera.updateMatrixWorld(true);
-    this.camera.updateProjectionMatrix();
-    this.viewProj.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
-  }
-  get viewProjection() {
-    return this.viewProj;
-  }
-  get eye() {
-    return this.camera.position;
+const Z_UP_TO_Y_UP = new Matrix4().makeRotationX(-Math.PI / 2);
+const Y_UP_TO_Z_UP = new Matrix4().makeRotationX(Math.PI / 2);
+const toCameraSpace = (box) => box.clone().applyMatrix4(Z_UP_TO_Y_UP);
+function useWebGpuProjection(camera) {
+  const cameras = [camera.camPerspective.camera, camera.camOrthographic.camera];
+  for (const c of cameras) {
+    c.coordinateSystem = WebGPUCoordinateSystem;
+    c.updateProjectionMatrix();
   }
 }
-const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
-function attachOrbitInput(canvas, camera) {
-  let button = -1;
-  let lastX = 0;
-  let lastY = 0;
-  const down = (e) => {
-    button = e.button;
-    lastX = e.clientX;
-    lastY = e.clientY;
-    canvas.setPointerCapture(e.pointerId);
-  };
-  const move = (e) => {
-    if (button < 0)
-      return;
-    const dx = e.clientX - lastX;
-    const dy = e.clientY - lastY;
-    lastX = e.clientX;
-    lastY = e.clientY;
-    if (button === 0)
-      camera.orbit(dx * 5e-3, dy * 5e-3);
-    else
-      camera.pan(dx, dy);
-  };
-  const up = (e) => {
-    button = -1;
-    canvas.releasePointerCapture(e.pointerId);
-  };
-  const wheel = (e) => {
-    e.preventDefault();
-    camera.zoom(e.deltaY);
-  };
-  const menu = (e) => e.preventDefault();
-  canvas.addEventListener("pointerdown", down);
-  canvas.addEventListener("pointermove", move);
-  canvas.addEventListener("pointerup", up);
-  canvas.addEventListener("pointercancel", up);
-  canvas.addEventListener("wheel", wheel, { passive: false });
-  canvas.addEventListener("contextmenu", menu);
-  return () => {
-    canvas.removeEventListener("pointerdown", down);
-    canvas.removeEventListener("pointermove", move);
-    canvas.removeEventListener("pointerup", up);
-    canvas.removeEventListener("pointercancel", up);
-    canvas.removeEventListener("wheel", wheel);
-    canvas.removeEventListener("contextmenu", menu);
-  };
+function modelViewProjection(camera, out = new Matrix4()) {
+  const three = camera.three;
+  three.updateMatrixWorld(true);
+  return out.multiplyMatrices(three.projectionMatrix, three.matrixWorldInverse).multiply(Z_UP_TO_Y_UP);
 }
+const modelEye = (camera, out = new Vector3()) => out.copy(camera.position).applyMatrix4(Y_UP_TO_Z_UP);
 const stallReason = (idleMs) => document.hidden ? "paused: page is not visible" : `paused: no frames for ${(idleMs / 1e3).toFixed(1)}s`;
 const WATCHDOG_INTERVAL_MS = 1e3;
 const STALL_MS = 2e3;
 class GpuViewer {
   constructor(canvas, ctx) {
     __publicField(this, "renderer");
-    __publicField(this, "camera", new OrbitCamera());
+    __publicField(this, "controls");
     __publicField(this, "onFrame");
     __publicField(this, "onStopped");
     __publicField(this, "onStalled");
-    __publicField(this, "detachInput");
     __publicField(this, "running", false);
     __publicField(this, "frames", 0);
     __publicField(this, "frameStart", 0);
     __publicField(this, "cpuMs", 0);
     __publicField(this, "triangles", 0);
     __publicField(this, "lastFrameAt", 0);
+    __publicField(this, "lastUpdateAt", 0);
     __publicField(this, "stalled", false);
     __publicField(this, "watchdog");
+    __publicField(this, "viewProj", new Matrix4());
+    __publicField(this, "eye", new Vector3());
     __publicField(this, "checkStalled", () => {
       const idle = performance.now() - this.lastFrameAt;
       const stalled = this.running && idle > STALL_MS;
@@ -860,10 +982,15 @@ class GpuViewer {
     __publicField(this, "loop", () => {
       if (!this.running)
         return;
-      this.camera.setAspect(this.renderer.aspect || 1);
+      const now = performance.now();
+      this.controls.update(Math.min((now - this.lastUpdateAt) / 1e3, 0.1));
+      this.lastUpdateAt = now;
       const t0 = performance.now();
       try {
-        this.renderer.render(this.camera.viewProjection, this.camera.eye);
+        this.renderer.render(
+          modelViewProjection(this.camera, this.viewProj),
+          modelEye(this.camera, this.eye)
+        );
       } catch (e) {
         this.fail("Rendering stopped: " + (e.message ?? e));
         return;
@@ -889,8 +1016,12 @@ class GpuViewer {
       requestAnimationFrame(this.loop);
     });
     this.renderer = new GpuRenderer(canvas, ctx);
-    this.detachInput = attachOrbitInput(canvas, this.camera);
+    this.controls = new CameraControls(canvas);
+    useWebGpuProjection(this.controls.camera);
     ctx.lost.then((info) => this.fail(`WebGPU device lost (${info.reason}): ${info.message}`));
+  }
+  get camera() {
+    return this.controls.camera;
   }
   fail(reason) {
     if (!this.running)
@@ -908,10 +1039,13 @@ class GpuViewer {
   setScene(scene) {
     this.renderer.setScene(scene);
     this.triangles = scene.triangleCount;
-    this.camera.frame(
+    const bounds = toCameraSpace(new Box3(
       new Vector3().fromArray(scene.boundsMin),
       new Vector3().fromArray(scene.boundsMax)
-    );
+    ));
+    const radius = Math.max(bounds.getSize(new Vector3()).length() * 0.5, 1e-3);
+    this.controls.setClipPlanes(Math.max(radius / 2e3, 1e-3), radius * 50);
+    this.controls.frame(bounds);
     console.log(`Scene has ${instanceCount(scene)} instances`);
   }
   start() {
@@ -920,6 +1054,7 @@ class GpuViewer {
     this.running = true;
     this.frameStart = performance.now();
     this.lastFrameAt = performance.now();
+    this.lastUpdateAt = performance.now();
     this.watchdog = setInterval(this.checkStalled, WATCHDOG_INTERVAL_MS);
     requestAnimationFrame(this.loop);
   }
@@ -930,7 +1065,7 @@ class GpuViewer {
   }
   dispose() {
     this.stop();
-    this.detachInput();
+    this.controls.dispose();
     this.renderer.dispose();
   }
 }
@@ -1017,11 +1152,13 @@ function showStats(panel, stats) {
   panel.set("fps", stats.fps.toFixed(1));
   panel.set("cpu", stats.cpuMs.toFixed(2));
   panel.set("draws", fmt(stats.drawCommands));
-  panel.set("drawn", stats.culling ? fmt(stats.drawnCommands) : "all");
+  panel.set("drawn", stats.drawnCommands < stats.drawCommands ? fmt(stats.drawnCommands) : "all");
   panel.set("tris", fmt(Math.round(stats.triangles)));
 }
 const DEFAULT_MODEL = "Snowdon Towers Sample Architectural.bos";
-const MODEL = "/ara3d-webgl/" + (new URLSearchParams(location.search).get("model") ?? DEFAULT_MODEL);
+const CONTROLS_HELP = "Left drag orbits, middle drag pans, right drag looks. Wheel zooms, W/A/S/D or arrows fly, Q/E go down/up, +/- change speed, F frames the model, Home resets, P toggles orthographic.";
+const requested = new URLSearchParams(location.search).get("model") ?? DEFAULT_MODEL;
+const MODEL = /^https?:\/\//.test(requested) ? requested : "/ara3d-webgl/" + requested;
 async function run() {
   const panel = createGpuPanel();
   if (!isWebGpuAvailable()) {
@@ -1067,16 +1204,21 @@ async function run() {
   viewer.onStalled = (reason) => panel.set("fps", reason ? "paused" : "-");
   viewer.start();
   panel.setNote("Loading model...");
-  const loader = new BosGpuLoader();
-  console.time("Loading .bos file");
+  const loader = new GpuModelLoader({ device: viewer.context.device });
+  console.time("Loading model file");
   const model = await loader.load(MODEL);
-  console.timeEnd("Loading .bos file");
+  console.timeEnd("Loading model file");
   viewer.setScene(model.scene);
   window.gpuDemo = { viewer, model, panel };
-  panel.setNote(
-    multiDraw ? "Drag to orbit, right drag to pan, wheel to zoom. Drop a .bos file to load your own." : "Multi-draw unavailable. " + MULTI_DRAW_HELP
-  );
+  panel.setNote(loadedNote(viewer, multiDraw), !multiDraw);
   enableFileDrop(panel, viewer, loader);
+}
+function loadedNote(viewer, multiDraw) {
+  if (multiDraw)
+    return CONTROLS_HELP + " Drop a .bos or .bfast file to load your own.";
+  const r = viewer.renderer;
+  const limited = r.fallbackActive ? `Showing the ${fmt(r.drawnCount)} largest of ${fmt(r.drawCount)} instances. ` : "";
+  return "Multi-draw unavailable. " + limited + MULTI_DRAW_HELP;
 }
 function enableFileDrop(panel, viewer, loader) {
   const stop = (e) => {
@@ -1086,18 +1228,18 @@ function enableFileDrop(panel, viewer, loader) {
   window.addEventListener("dragover", stop);
   window.addEventListener("drop", async (e) => {
     stop(e);
-    const file = [...e.dataTransfer?.files ?? []].find((f) => f.name.toLowerCase().endsWith(".bos"));
+    const file = [...e.dataTransfer?.files ?? []].find((f) => isGpuModelFile(f.name));
     if (!file)
       return;
     panel.setNote("Loading " + file.name + "...");
     try {
       const model = await loader.loadFromFile(file);
       viewer.setScene(model.scene);
-      panel.setNote("Loaded " + file.name);
+      panel.setNote("Loaded " + file.name + ". " + loadedNote(viewer, viewer.context.multiDraw));
     } catch (err) {
       panel.setNote("Failed to load " + file.name + ": " + err, true);
     }
   });
 }
 run();
-//# sourceMappingURL=exampleWebGpuMultiDraw.7093d864.js.map
+//# sourceMappingURL=exampleWebGpuMultiDraw.51f04ddb.js.map

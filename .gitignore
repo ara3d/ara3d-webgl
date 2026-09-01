@@ -19,3 +19,5 @@ models/*
 #ignore generated test fixtures and harness bundles
 out/*
 examples/public/*.bfast
+docs/nmi-ifc-all.bos
+docs/snowdon.bfast

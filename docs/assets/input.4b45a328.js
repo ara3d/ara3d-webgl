@@ -4,10 +4,13 @@ var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
   return value;
 };
-import { B as BimOpenSchemaLoader, l as loadBimGeometryFromZip } from "./bimOpenSchemaLoader.1c0420b7.js";
-import { t as three_module, D as DefaultInputScheme, K as KEYS, V as Viewer, g as getSettings } from "./viewer.eec8521c.js";
-import { G as GltfLoader } from "./gltfLoader.c3a36e8a.js";
+import "./modulepreload-polyfill.c7c6310f.js";
+import { t as three_module, V as Viewer } from "./viewer.f912142e.js";
+import { D as DefaultInputScheme, K as KEYS, g as getSettings, B as BimOpenSchemaLoader, l as loadBimGeometryFromZip } from "./bimOpenSchemaLoader.69b9fd7e.js";
+import { C as CameraControls, a as CanvasViewport, m as memorySink, B as BFastStreamReader, r as readBFastStream } from "./bfastStream.5fe1e8fa.js";
+import { G as GltfLoader } from "./gltfLoader.aca06de8.js";
 import { D as DataTable } from "./DataTable.e67c04b5.js";
+import { B as BFAST_MAGIC, a as BFast, i as isBFast, r as readBFastHeader, b as BFAST_HEADER_PROBE, c as bfastHeaderSize, d as readBFast, M as MESH_SLICE_INTS, I as INSTANCE_BYTES, e as INSTANCE_FLOAT_STRIDE, f as INSTANCE_HIDDEN_FLAG, N as NO_MESH_INDEX, V as VERTEX_COLORS_FLAG, m as meshCount, g as instanceCount, v as vertexCount, h as instanceMeshIndex, j as instanceEntityIndex, k as instanceFlags, l as instanceHidden, n as instanceColor, o as instanceAlpha, p as instanceMatrix, R as RENDER_MODEL_BUFFERS, q as isRenderModel, s as readRenderModelTables, t as readRenderModel } from "./renderModel.76ea7852.js";
 class GizmoOptions {
   constructor(init) {
     __publicField(this, "size", 84);
@@ -52,10 +55,42 @@ const ARA3D = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePropert
   Viewer,
   GizmoOptions,
   getSettings,
+  CameraControls,
+  CanvasViewport,
   GltfLoader,
   BimOpenSchemaLoader,
   loadBimGeometryFromZip,
-  DataTable
+  DataTable,
+  BFAST_MAGIC,
+  BFast,
+  isBFast,
+  readBFastHeader,
+  BFAST_HEADER_PROBE,
+  bfastHeaderSize,
+  readBFast,
+  MESH_SLICE_INTS,
+  INSTANCE_BYTES,
+  INSTANCE_FLOAT_STRIDE,
+  INSTANCE_HIDDEN_FLAG,
+  NO_MESH_INDEX,
+  VERTEX_COLORS_FLAG,
+  meshCount,
+  instanceCount,
+  vertexCount,
+  instanceMeshIndex,
+  instanceEntityIndex,
+  instanceFlags,
+  instanceHidden,
+  instanceColor,
+  instanceAlpha,
+  instanceMatrix,
+  RENDER_MODEL_BUFFERS,
+  isRenderModel,
+  readRenderModelTables,
+  readRenderModel,
+  memorySink,
+  BFastStreamReader,
+  readBFastStream
 }, Symbol.toStringTag, { value: "Module" }));
 console.log(ARA3D);
-//# sourceMappingURL=input.a16a77e8.js.map
+//# sourceMappingURL=input.4b45a328.js.map

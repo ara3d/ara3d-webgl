@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFAST load profile</title>
+  <style>
+    body { background: #16181c; color: #d8dde5; font: 13px/1.5 ui-monospace, Consolas, monospace; margin: 0; padding: 20px; }
+    h1 { font-size: 15px; color: #e8b339; margin: 0 0 4px; }
+    p.note { color: #97a1b0; margin: 0 0 16px; max-width: 70ch; }
+    table { border-collapse: collapse; margin: 0 0 22px; }
+    caption { text-align: left; color: #e8b339; padding: 10px 0 6px; font-weight: bold; }
+    th, td { padding: 3px 14px 3px 0; text-align: right; white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; }
+    th { color: #97a1b0; font-weight: normal; border-bottom: 1px solid #2c3039; }
+    tr.total td { border-top: 1px solid #2c3039; color: #e8b339; }
+    .bar { display: inline-block; height: 9px; background: #4a7fd4; vertical-align: middle; }
+    #err { color: #ff6b6b; white-space: pre-wrap; }
+    input { background: #22252b; color: #d8dde5; border: 1px solid #2c3039; padding: 4px 6px; width: 44ch; }
+    button { background: #2c3039; color: #d8dde5; border: 1px solid #3a3f4b; padding: 4px 12px; cursor: pointer; }
+  </style>
+  <script type="module" crossorigin src="/ara3d-webgl/assets/profileBfast.636a3717.js"></script>
+  <link rel="modulepreload" crossorigin href="/ara3d-webgl/assets/modulepreload-polyfill.c7c6310f.js">
+  <link rel="modulepreload" crossorigin href="/ara3d-webgl/assets/renderModel.76ea7852.js">
+  <link rel="modulepreload" crossorigin href="/ara3d-webgl/assets/buildGpuSceneFromModel.4980941e.js">
+</head>
+<body>
+<h1>BFAST load profile</h1>
+<p class="note">
+  Measures where the time goes when loading a .bfast render model, and compares
+  two ways of getting the bytes to the GPU: reading the whole file into one
+  ArrayBuffer, and streaming each buffer straight into its GPU buffer with a
+  range request. Pass <code>?model=&lt;url&gt;</code> to profile a different file.
+</p>
+<p>
+  <input id="url" /> <input id="gzipUrl" /> <button id="run">Run</button>
+</p>
+<div id="err"></div>
+<div id="out"></div>
+
+
+</body>
+</html>

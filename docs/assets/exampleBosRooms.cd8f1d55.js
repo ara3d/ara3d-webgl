@@ -1,5 +1,6 @@
-import { B as BimOpenSchemaLoader, ew as MeshStandardMaterial, C as Color } from "./bimOpenSchemaLoader.1c0420b7.js";
-import { V as Viewer } from "./viewer.eec8521c.js";
+import "./modulepreload-polyfill.c7c6310f.js";
+import { V as Viewer } from "./viewer.f912142e.js";
+import { B as BimOpenSchemaLoader, ez as MeshStandardMaterial, C as Color } from "./bimOpenSchemaLoader.69b9fd7e.js";
 import { D as DataTable } from "./DataTable.e67c04b5.js";
 import { b as bindBosHotSwap } from "./bosHotSwap.a48ac0b2.js";
 const TABULATOR_CSS = "https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css";
@@ -1110,4 +1111,4 @@ async function runExample() {
   refreshColorsFromCurrentChoice();
 }
 runExample();
-//# sourceMappingURL=exampleBosRooms.ae2139d6.js.map
+//# sourceMappingURL=exampleBosRooms.cd8f1d55.js.map
