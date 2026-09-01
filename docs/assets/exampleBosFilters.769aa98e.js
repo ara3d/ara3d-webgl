@@ -1,6 +1,6 @@
 import "./modulepreload-polyfill.c7c6310f.js";
-import { V as Viewer } from "./viewer.f912142e.js";
-import { B as BimOpenSchemaLoader, ez as MeshStandardMaterial } from "./bimOpenSchemaLoader.69b9fd7e.js";
+import { V as Viewer } from "./viewer.b9ba82bf.js";
+import { B as BimOpenSchemaLoader, ez as MeshStandardMaterial } from "./bimOpenSchemaLoader.bafda526.js";
 import { b as bindBosHotSwap } from "./bosHotSwap.a48ac0b2.js";
 function showFilter(name, filter, onChange) {
   if (!name || !filter) {
@@ -387,4 +387,4 @@ async function runExample() {
   console.timeEnd("Loading .bos file");
 }
 runExample();
-//# sourceMappingURL=exampleBosFilters.f1dfa661.js.map
+//# sourceMappingURL=exampleBosFilters.769aa98e.js.map

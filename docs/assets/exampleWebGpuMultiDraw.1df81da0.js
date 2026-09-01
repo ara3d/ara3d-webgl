@@ -6,9 +6,9 @@ var __publicField = (obj, key, value) => {
 };
 import "./modulepreload-polyfill.c7c6310f.js";
 import { c as columnVertices, a as cpuBytes, I as INSTANCE_FLOATS, D as DRAW_COMMAND_WORDS, b as buildGpuSceneFromTables, i as interleavedVertices, g as gpuBytes, d as buildGpuSceneFromModel, e as instanceCount, f as drawCount, r as requestGpuContext, h as instancedTriangleCount, m as meshTriangleCount, j as isWebGpuAvailable, M as MULTI_DRAW_HELP } from "./buildGpuSceneFromModel.e01cea5b.js";
-import { s as Matrix4, a as Vector3, e_ as Quaternion, gb as JSZip, l as loadBimGeometryFromZip, F as Frustum, f_ as WebGPUCoordinateSystem, cJ as Box3 } from "./bimOpenSchemaLoader.69b9fd7e.js";
+import { s as Matrix4, a as Vector3, e_ as Quaternion, gb as JSZip, l as loadBimGeometryFromZip, F as Frustum, f_ as WebGPUCoordinateSystem, cJ as Box3 } from "./bimOpenSchemaLoader.bafda526.js";
 import { s as readRenderModelTables, R as RENDER_MODEL_BUFFERS, i as isBFast, d as readBFast, q as isRenderModel, t as readRenderModel, b as BFAST_HEADER_PROBE } from "./renderModel.76ea7852.js";
-import { B as BFastStreamReader, m as memorySink, C as CameraControls } from "./bfastStream.5fe1e8fa.js";
+import { B as BFastStreamReader, m as memorySink, C as CameraControls } from "./bfastStream.3dc97dce.js";
 function computeMeshSpheres(bg, vertexScale) {
   const { VertexX, VertexY, VertexZ, MeshVertexOffset } = bg;
   const meshCount = MeshVertexOffset.length;
@@ -1101,10 +1101,16 @@ const STYLE = `
 .gpu-slider { margin-top: 6px; display: flex; align-items: center; gap: 8px; color: #cbd4e1; }
 .gpu-slider input { flex: 1; }
 .gpu-slider span { color: #ffd479; min-width: 56px; text-align: right; }
+.gpu-slider .gpu-slider-label { color: #cbd4e1; min-width: 0; text-align: left; }
 `;
 const MAX_THRESHOLD_PX = 4;
 const sliderToPixels = (position) => Math.round(MAX_THRESHOLD_PX * Math.pow(position / 1e3, 3) * 1e3) / 1e3;
 const pixelsToSlider = (px) => Math.round(1e3 * Math.cbrt(px / MAX_THRESHOLD_PX));
+const SPEED_MIN = -10;
+const SPEED_MAX = 10;
+const speedMultiplier = (speed) => Math.pow(1.25, speed);
+const sliderToSensitivity = (position) => Math.pow(10, position / 500 - 1);
+const sensitivityToSlider = (value) => Math.round(500 * (Math.log10(value) + 1));
 const ROWS = [
   ["adapter", "Adapter"],
   ["status", "Multi-draw"],
@@ -1127,7 +1133,7 @@ function createGpuPanel() {
   page.appendChild(canvas);
   const panel = document.createElement("div");
   panel.className = "gpu-panel open";
-  panel.innerHTML = '<h2><span>BIM Open Schema &mdash; WebGPU multiDrawIndexedIndirect</span><button class="gpu-rollup" id="gpu-rollup" title="Hide the panel">&#9650;</button></h2><div id="gpu-body">' + ROWS.map(([id, label]) => `<div class="gpu-row"><span>${label}</span><span id="gpu-${id}">-</span></div>`).join("") + '<div class="gpu-note" id="gpu-note">Starting up...</div><label class="gpu-toggle"><input type="checkbox" id="gpu-multi" checked disabled>Use multiDrawIndexedIndirect</label><label class="gpu-toggle"><input type="checkbox" id="gpu-cull" disabled>GPU frustum culling</label><label class="gpu-toggle"><input type="checkbox" id="gpu-contrib" disabled>GPU contribution culling</label><div class="gpu-slider"><input type="range" id="gpu-contrib-px" min="0" max="1000" step="1" disabled><span id="gpu-contrib-value">-</span></div></div>';
+  panel.innerHTML = '<h2><span>BIM Open Schema &mdash; WebGPU multiDrawIndexedIndirect</span><button class="gpu-rollup" id="gpu-rollup" title="Hide the panel">&#9650;</button></h2><div id="gpu-body">' + ROWS.map(([id, label]) => `<div class="gpu-row"><span>${label}</span><span id="gpu-${id}">-</span></div>`).join("") + `<div class="gpu-note" id="gpu-note">Starting up...</div><label class="gpu-toggle"><input type="checkbox" id="gpu-multi" checked disabled>Use multiDrawIndexedIndirect</label><label class="gpu-toggle"><input type="checkbox" id="gpu-cull" disabled>GPU frustum culling</label><label class="gpu-toggle"><input type="checkbox" id="gpu-contrib" disabled>GPU contribution culling</label><div class="gpu-slider"><input type="range" id="gpu-contrib-px" min="0" max="1000" step="1" disabled><span id="gpu-contrib-value">-</span></div><div class="gpu-slider"><span class="gpu-slider-label">Move speed</span><input type="range" id="gpu-speed" min="${SPEED_MIN}" max="${SPEED_MAX}" step="0.5"><span id="gpu-speed-value">-</span></div><div class="gpu-slider"><span class="gpu-slider-label">Mouse</span><input type="range" id="gpu-sens" min="0" max="1000" step="1"><span id="gpu-sens-value">-</span></div></div>`;
   page.appendChild(panel);
   document.body.appendChild(page);
   const cell = (id) => document.getElementById("gpu-" + id);
@@ -1146,6 +1152,10 @@ function createGpuPanel() {
   const contribToggle = cell("contrib");
   const contribSlider = cell("contrib-px");
   const contribValue = cell("contrib-value");
+  const speedSlider = cell("speed");
+  const speedValue = cell("speed-value");
+  const sensSlider = cell("sens");
+  const sensValue = cell("sens-value");
   return {
     canvas,
     toggle,
@@ -1161,6 +1171,28 @@ function createGpuPanel() {
     },
     showContributionPixels() {
       contribValue.textContent = this.contributionPixels().toFixed(2) + " px";
+    },
+    speedSlider,
+    sensitivitySlider: sensSlider,
+    moveSpeed() {
+      return Number(speedSlider.value);
+    },
+    setMoveSpeed(speed) {
+      speedSlider.value = String(speed);
+      this.showMoveSpeed();
+    },
+    showMoveSpeed() {
+      speedValue.textContent = speedMultiplier(this.moveSpeed()).toFixed(2) + "x";
+    },
+    mouseSensitivity() {
+      return sliderToSensitivity(Number(sensSlider.value));
+    },
+    setMouseSensitivity(value) {
+      sensSlider.value = String(sensitivityToSlider(value));
+      this.showMouseSensitivity();
+    },
+    showMouseSensitivity() {
+      sensValue.textContent = this.mouseSensitivity().toFixed(2) + "x";
     },
     set(id, value) {
       cell(id).textContent = value;
@@ -1224,7 +1256,22 @@ async function run() {
     panel.showContributionPixels();
     viewer.renderer.contributionThreshold = panel.contributionPixels();
   });
-  viewer.onFrame = (stats) => showStats(panel, stats);
+  panel.setMoveSpeed(viewer.controls.speed);
+  panel.speedSlider.addEventListener("input", () => {
+    panel.showMoveSpeed();
+    viewer.controls.speed = panel.moveSpeed();
+  });
+  panel.setMouseSensitivity(viewer.controls.mouseSensitivity);
+  panel.sensitivitySlider.addEventListener("input", () => {
+    panel.showMouseSensitivity();
+    viewer.controls.mouseSensitivity = panel.mouseSensitivity();
+  });
+  viewer.onFrame = (stats) => {
+    showStats(panel, stats);
+    if (panel.moveSpeed() !== viewer.controls.speed) {
+      panel.setMoveSpeed(viewer.controls.speed);
+    }
+  };
   viewer.onStopped = (reason) => panel.setNote(reason, true);
   viewer.onStalled = (reason) => panel.set("fps", reason ? "paused" : "-");
   viewer.start();
@@ -1267,4 +1314,4 @@ function enableFileDrop(panel, viewer, loader) {
   });
 }
 run();
-//# sourceMappingURL=exampleWebGpuMultiDraw.9e17197a.js.map
+//# sourceMappingURL=exampleWebGpuMultiDraw.1df81da0.js.map

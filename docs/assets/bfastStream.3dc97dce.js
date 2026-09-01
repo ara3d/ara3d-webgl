@@ -4,7 +4,7 @@ var __publicField = (obj, key, value) => {
   __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
   return value;
 };
-import { V as Vector2, g as getSettings, g9 as Camera, ga as Input } from "./bimOpenSchemaLoader.69b9fd7e.js";
+import { V as Vector2, g as getSettings, g9 as Camera, ga as Input } from "./bimOpenSchemaLoader.bafda526.js";
 import { c as bfastHeaderSize, r as readBFastHeader } from "./renderModel.76ea7852.js";
 class CanvasViewport {
   constructor(canvas) {
@@ -34,6 +34,18 @@ class CameraControls {
   }
   requestRender() {
     this.onRequestRender?.();
+  }
+  get speed() {
+    return this.camera.speed;
+  }
+  set speed(value) {
+    this.camera.speed = value;
+  }
+  get mouseSensitivity() {
+    return this.inputs.mouse.sensitivity;
+  }
+  set mouseSensitivity(value) {
+    this.inputs.mouse.sensitivity = value;
   }
   update(deltaTime) {
     return this.camera.update(deltaTime);
@@ -145,4 +157,4 @@ export {
   memorySink as m,
   readBFastStream as r
 };
-//# sourceMappingURL=bfastStream.5fe1e8fa.js.map
+//# sourceMappingURL=bfastStream.3dc97dce.js.map

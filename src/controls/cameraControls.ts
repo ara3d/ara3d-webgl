@@ -31,6 +31,28 @@ export class CameraControls implements InputHost {
     this.onRequestRender?.()
   }
 
+  /**
+   * Keyboard flight speed step, also used by the mouse wheel dolly.
+   * Exponential: each +1 moves 1.25 times faster. The +/- keys and
+   * ctrl+wheel adjust the same value.
+   */
+  get speed () {
+    return this.camera.speed
+  }
+
+  set speed (value: number) {
+    this.camera.speed = value
+  }
+
+  /** Scales how much orbit, look and pan respond to mouse movement. */
+  get mouseSensitivity () {
+    return this.inputs.mouse.sensitivity
+  }
+
+  set mouseSensitivity (value: number) {
+    this.inputs.mouse.sensitivity = value
+  }
+
   /** Advances velocity based movement. Returns true when the camera moved. */
   update (deltaTime: number) {
     return this.camera.update(deltaTime)

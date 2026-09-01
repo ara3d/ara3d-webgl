@@ -1,6 +1,6 @@
 import "./modulepreload-polyfill.c7c6310f.js";
-import { V as Viewer } from "./viewer.f912142e.js";
-import { f6 as Raycaster, ez as MeshStandardMaterial, B as BimOpenSchemaLoader, V as Vector2 } from "./bimOpenSchemaLoader.69b9fd7e.js";
+import { V as Viewer } from "./viewer.b9ba82bf.js";
+import { f6 as Raycaster, ez as MeshStandardMaterial, B as BimOpenSchemaLoader, V as Vector2 } from "./bimOpenSchemaLoader.bafda526.js";
 import { b as bindBosHotSwap } from "./bosHotSwap.a48ac0b2.js";
 async function runExample() {
   const viewer = new Viewer({
@@ -194,4 +194,4 @@ async function runExample() {
   console.log("Viewport selection example ready. Click on objects to select them.");
 }
 runExample();
-//# sourceMappingURL=exampleBosSelection.a176b745.js.map
+//# sourceMappingURL=exampleBosSelection.55fa2194.js.map

@@ -1,7 +1,7 @@
 import "./modulepreload-polyfill.c7c6310f.js";
-import { V as Viewer } from "./viewer.f912142e.js";
-import "./bimOpenSchemaLoader.69b9fd7e.js";
-import { G as GltfLoader } from "./gltfLoader.aca06de8.js";
+import { V as Viewer } from "./viewer.b9ba82bf.js";
+import "./bimOpenSchemaLoader.bafda526.js";
+import { G as GltfLoader } from "./gltfLoader.e48e4a6a.js";
 async function runExample() {
   const viewer = new Viewer();
   const loader = new GltfLoader();
@@ -16,4 +16,4 @@ async function runExample() {
   console.log("Completed");
 }
 runExample();
-//# sourceMappingURL=exampleGltf.6084e1b2.js.map
+//# sourceMappingURL=exampleGltf.fbb2879b.js.map

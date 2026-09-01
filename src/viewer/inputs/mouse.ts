@@ -13,6 +13,8 @@ export class MouseHandler extends InputHandler {
   panSpeed = 1
   rotateSpeed = 1
   orbitSpeed = 1
+  /** Scales how much orbit, look and pan respond to mouse movement. */
+  sensitivity = 1
 
   // State
   private _buttonDown: Button
@@ -168,17 +170,18 @@ export class MouseHandler extends InputHandler {
   private onMouseMainDrag (delta: THREE.Vector2) {
     switch (this.inputs.pointerActive) {
       case 'orbit':
-        this.camera.do().orbit(this.toRotation(delta, this.orbitSpeed))
+        this.camera.do().orbit(
+          this.toRotation(delta, this.orbitSpeed * this.sensitivity))
         break
       case 'look':
         this.camera
           .do()
-          .rotate(this.toRotation(delta, this.rotateSpeed))
+          .rotate(this.toRotation(delta, this.rotateSpeed * this.sensitivity))
         break
       case 'pan':
         this.camera
           .do()
-          .move2(this.toPanDelta(delta).multiplyScalar(this.panSpeed), 'XY')
+          .move2(this.panDelta(delta), 'XY')
         break
       case 'zoom':
         this.camera.do().zoom(1 + delta.y * this.zoomSpeed)
@@ -187,11 +190,17 @@ export class MouseHandler extends InputHandler {
   }
 
   private onMouseMiddleDrag (delta: THREE.Vector2) {
-    this.camera.do().move2(this.toPanDelta(delta).multiplyScalar(this.panSpeed), 'XY')
+    this.camera.do().move2(this.panDelta(delta), 'XY')
   }
 
   private onMouseRightDrag (delta: THREE.Vector2) {
-    this.camera.do().rotate(this.toRotation(delta, this.rotateSpeed))
+    this.camera.do().rotate(
+      this.toRotation(delta, this.rotateSpeed * this.sensitivity))
+  }
+
+  private panDelta (delta: THREE.Vector2) {
+    return this.toPanDelta(delta)
+      .multiplyScalar(this.panSpeed * this.sensitivity)
   }
 
   private onMouseWheel = (event: WheelEvent) => {
@@ -206,7 +215,10 @@ export class MouseHandler extends InputHandler {
     if (event.ctrlKey) {
       this.camera.speed -= scrollValue
     } else {
-      const zoom = Math.pow(1.3, scrollValue)
+      // Wheel dolly follows the camera speed so one setting governs both
+      // keyboard flight and wheel zoom. Speed 0 keeps the classic 1.3 step.
+      const step = Math.pow(1.25, this.camera.speed)
+      const zoom = Math.pow(1.3, scrollValue * step)
       this.camera.lerp(0.25).zoom(zoom)
     }
   }
@@ -239,7 +251,7 @@ export class MouseHandler extends InputHandler {
     this.inputs.pointerOverride = undefined
   }
 
-  private getModifier (event: MouseEvent | WheelEvent) {
+  private getModifier (event: MouseEvent | WheelEvent): Modifier {
     return event.ctrlKey ? 'ctrl' : event.shiftKey ? 'shift' : 'none'
   }
 

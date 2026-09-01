@@ -23948,6 +23948,7 @@ class MouseHandler extends InputHandler {
     __publicField(this, "panSpeed", 1);
     __publicField(this, "rotateSpeed", 1);
     __publicField(this, "orbitSpeed", 1);
+    __publicField(this, "sensitivity", 1);
     __publicField(this, "_buttonDown");
     __publicField(this, "_hasMouseMoved", false);
     __publicField(this, "_hasCameraMoved", false);
@@ -24003,7 +24004,8 @@ class MouseHandler extends InputHandler {
       if (event.ctrlKey) {
         this.camera.speed -= scrollValue;
       } else {
-        const zoom = Math.pow(1.3, scrollValue);
+        const step = Math.pow(1.25, this.camera.speed);
+        const zoom = Math.pow(1.3, scrollValue * step);
         this.camera.lerp(0.25).zoom(zoom);
       }
     });
@@ -24087,13 +24089,15 @@ class MouseHandler extends InputHandler {
   onMouseMainDrag(delta) {
     switch (this.inputs.pointerActive) {
       case "orbit":
-        this.camera.do().orbit(this.toRotation(delta, this.orbitSpeed));
+        this.camera.do().orbit(
+          this.toRotation(delta, this.orbitSpeed * this.sensitivity)
+        );
         break;
       case "look":
-        this.camera.do().rotate(this.toRotation(delta, this.rotateSpeed));
+        this.camera.do().rotate(this.toRotation(delta, this.rotateSpeed * this.sensitivity));
         break;
       case "pan":
-        this.camera.do().move2(this.toPanDelta(delta).multiplyScalar(this.panSpeed), "XY");
+        this.camera.do().move2(this.panDelta(delta), "XY");
         break;
       case "zoom":
         this.camera.do().zoom(1 + delta.y * this.zoomSpeed);
@@ -24101,10 +24105,15 @@ class MouseHandler extends InputHandler {
     }
   }
   onMouseMiddleDrag(delta) {
-    this.camera.do().move2(this.toPanDelta(delta).multiplyScalar(this.panSpeed), "XY");
+    this.camera.do().move2(this.panDelta(delta), "XY");
   }
   onMouseRightDrag(delta) {
-    this.camera.do().rotate(this.toRotation(delta, this.rotateSpeed));
+    this.camera.do().rotate(
+      this.toRotation(delta, this.rotateSpeed * this.sensitivity)
+    );
+  }
+  panDelta(delta) {
+    return this.toPanDelta(delta).multiplyScalar(this.panSpeed * this.sensitivity);
   }
   getButton(event) {
     return event.buttons & 1 ? "main" : event.buttons & 2 ? "right" : event.buttons & 4 ? "middle" : void 0;
@@ -35116,4 +35125,4 @@ export {
   DoubleSide as y,
   FrontSide as z
 };
-//# sourceMappingURL=bimOpenSchemaLoader.69b9fd7e.js.map
+//# sourceMappingURL=bimOpenSchemaLoader.bafda526.js.map

@@ -27,6 +27,7 @@ const STYLE = `
 .gpu-slider { margin-top: 6px; display: flex; align-items: center; gap: 8px; color: #cbd4e1; }
 .gpu-slider input { flex: 1; }
 .gpu-slider span { color: #ffd479; min-width: 56px; text-align: right; }
+.gpu-slider .gpu-slider-label { color: #cbd4e1; min-width: 0; text-align: left; }
 `
 
 const MAX_THRESHOLD_PX = 4
@@ -39,6 +40,18 @@ const sliderToPixels = (position) =>
   Math.round(MAX_THRESHOLD_PX * Math.pow(position / 1000, 3) * 1000) / 1000
 
 const pixelsToSlider = (px) => Math.round(1000 * Math.cbrt(px / MAX_THRESHOLD_PX))
+
+// Movement speed is the camera's exponential speed step: each +1 flies
+// 1.25 times faster. The slider covers about 0.1x to 9.3x.
+const SPEED_MIN = -10
+const SPEED_MAX = 10
+const speedMultiplier = (speed) => Math.pow(1.25, speed)
+
+// Mouse sensitivity is a plain multiplier, mapped logarithmically over
+// 0.1x to 10x so both halves of the range get fine steps.
+const sliderToSensitivity = (position) => Math.pow(10, position / 500 - 1)
+const sensitivityToSlider = (value) =>
+  Math.round(500 * (Math.log10(value) + 1))
 
 const ROWS = [
   ['adapter', 'Adapter'],
@@ -83,6 +96,12 @@ export function createGpuPanel () {
     '<div class="gpu-slider"><input type="range" id="gpu-contrib-px" ' +
     'min="0" max="1000" step="1" disabled>' +
     '<span id="gpu-contrib-value">-</span></div>' +
+    '<div class="gpu-slider"><span class="gpu-slider-label">Move speed</span>' +
+    `<input type="range" id="gpu-speed" min="${SPEED_MIN}" max="${SPEED_MAX}" step="0.5">` +
+    '<span id="gpu-speed-value">-</span></div>' +
+    '<div class="gpu-slider"><span class="gpu-slider-label">Mouse</span>' +
+    '<input type="range" id="gpu-sens" min="0" max="1000" step="1">' +
+    '<span id="gpu-sens-value">-</span></div>' +
     '</div>'
   page.appendChild(panel)
 
@@ -104,6 +123,10 @@ export function createGpuPanel () {
   const contribToggle = cell('contrib')
   const contribSlider = cell('contrib-px')
   const contribValue = cell('contrib-value')
+  const speedSlider = cell('speed')
+  const speedValue = cell('speed-value')
+  const sensSlider = cell('sens')
+  const sensValue = cell('sens-value')
 
   return {
     canvas,
@@ -120,6 +143,28 @@ export function createGpuPanel () {
     },
     showContributionPixels () {
       contribValue.textContent = this.contributionPixels().toFixed(2) + ' px'
+    },
+    speedSlider,
+    sensitivitySlider: sensSlider,
+    /** Camera speed step currently shown by the move speed slider. */
+    moveSpeed () { return Number(speedSlider.value) },
+    /** Moves the slider to a camera speed step and updates the readout. */
+    setMoveSpeed (speed) {
+      speedSlider.value = String(speed)
+      this.showMoveSpeed()
+    },
+    showMoveSpeed () {
+      speedValue.textContent = speedMultiplier(this.moveSpeed()).toFixed(2) + 'x'
+    },
+    /** Mouse sensitivity multiplier currently shown by the slider. */
+    mouseSensitivity () { return sliderToSensitivity(Number(sensSlider.value)) },
+    /** Moves the slider to a sensitivity multiplier and updates the readout. */
+    setMouseSensitivity (value) {
+      sensSlider.value = String(sensitivityToSlider(value))
+      this.showMouseSensitivity()
+    },
+    showMouseSensitivity () {
+      sensValue.textContent = this.mouseSensitivity().toFixed(2) + 'x'
     },
     set (id, value) { cell(id).textContent = value },
     setNote (text, bad = false) {

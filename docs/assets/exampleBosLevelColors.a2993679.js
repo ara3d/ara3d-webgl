@@ -1,6 +1,6 @@
 import "./modulepreload-polyfill.c7c6310f.js";
-import { V as Viewer } from "./viewer.f912142e.js";
-import { B as BimOpenSchemaLoader, C as Color, ez as MeshStandardMaterial, y as DoubleSide } from "./bimOpenSchemaLoader.69b9fd7e.js";
+import { V as Viewer } from "./viewer.b9ba82bf.js";
+import { B as BimOpenSchemaLoader, C as Color, ez as MeshStandardMaterial, y as DoubleSide } from "./bimOpenSchemaLoader.bafda526.js";
 import { b as bindBosHotSwap } from "./bosHotSwap.a48ac0b2.js";
 const paletteState = {
   saturation: 0.45,
@@ -128,4 +128,4 @@ async function runExample() {
   setModel(data);
 }
 runExample();
-//# sourceMappingURL=exampleBosLevelColors.70a8f5f7.js.map
+//# sourceMappingURL=exampleBosLevelColors.a2993679.js.map

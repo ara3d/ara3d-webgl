@@ -1,6 +1,6 @@
 import "./modulepreload-polyfill.c7c6310f.js";
-import { V as Viewer } from "./viewer.f912142e.js";
-import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.69b9fd7e.js";
+import { V as Viewer } from "./viewer.b9ba82bf.js";
+import { B as BimOpenSchemaLoader } from "./bimOpenSchemaLoader.bafda526.js";
 async function runExample() {
   const viewer = new Viewer();
   const loader = new BimOpenSchemaLoader();
@@ -11,4 +11,4 @@ async function runExample() {
   viewer.add(group);
 }
 runExample();
-//# sourceMappingURL=exampleBos.fe77c890.js.map
+//# sourceMappingURL=exampleBos.46e16509.js.map

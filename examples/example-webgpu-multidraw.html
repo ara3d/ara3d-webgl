@@ -63,7 +63,25 @@ async function run () {
     viewer.renderer.contributionThreshold = panel.contributionPixels()
   })
 
-  viewer.onFrame = (stats) => showStats(panel, stats)
+  panel.setMoveSpeed(viewer.controls.speed)
+  panel.speedSlider.addEventListener('input', () => {
+    panel.showMoveSpeed()
+    viewer.controls.speed = panel.moveSpeed()
+  })
+
+  panel.setMouseSensitivity(viewer.controls.mouseSensitivity)
+  panel.sensitivitySlider.addEventListener('input', () => {
+    panel.showMouseSensitivity()
+    viewer.controls.mouseSensitivity = panel.mouseSensitivity()
+  })
+
+  viewer.onFrame = (stats) => {
+    showStats(panel, stats)
+    // The +/- keys and ctrl+wheel change the speed too; keep the slider honest.
+    if (panel.moveSpeed() !== viewer.controls.speed) {
+      panel.setMoveSpeed(viewer.controls.speed)
+    }
+  }
   viewer.onStopped = (reason) => panel.setNote(reason, true)
   // Browsers stop animation frames while the page is hidden; say so instead of
   // leaving the last frame rate on screen looking live.
