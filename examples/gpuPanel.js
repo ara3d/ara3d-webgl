@@ -114,7 +114,7 @@ export function showStats (panel, stats) {
   panel.set('fps', stats.fps.toFixed(1))
   panel.set('cpu', stats.cpuMs.toFixed(2))
   panel.set('draws', fmt(stats.drawCommands))
-  panel.set('drawn', stats.culling ? fmt(stats.drawnCommands) : 'all')
+  panel.set('drawn', stats.drawnCommands < stats.drawCommands ? fmt(stats.drawnCommands) : 'all')
   panel.set('tris', fmt(Math.round(stats.triangles)))
 }
 

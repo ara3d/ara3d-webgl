@@ -4,6 +4,7 @@ import { GpuContext } from './gpuDevice'
 import { createBuffer, toGpuBuffer } from './gpuBuffers'
 import { sceneShader } from './shaders/sceneShader'
 import { DRAW_COMMAND_WORDS, DrawRange, GpuScene, drawCount } from './gpuScene'
+import { selectLargestDraws } from './fallbackDraws'
 import { GpuVertices } from './gpuVertices'
 import { GpuCuller, OPAQUE_COUNT_OFFSET, TRANSPARENT_COUNT_OFFSET } from './gpuCuller'
 
@@ -23,6 +24,8 @@ type SceneResources = {
     indices: GPUBuffer;
     instances: GPUBuffer;
     indirect: GPUBuffer;
+    /** Present when the scene has too many commands for the one-call-per-draw path. */
+    fallback?: { indirect: GPUBuffer; opaque: DrawRange; transparent: DrawRange };
     bindGroup: GPUBindGroup;
     culler: GpuCuller;
     pipelines: ScenePipelines;
@@ -75,6 +78,14 @@ export class GpuRenderer {
    * different distances makes an object look wrong rather than just cheaper.
    */
   contributionThreshold = 0.1
+
+  /**
+   * Without the multi-draw extension every draw command costs a separate call
+   * per frame, and millions of them can hang the GPU driver and freeze the
+   * machine. On that path, a scene with more commands than this shows only
+   * its largest instances. Read at {@link setScene}.
+   */
+  maxFallbackDraws = 50_000
 
   constructor (canvas: HTMLCanvasElement, ctx: GpuContext) {
     this.canvas = canvas
@@ -194,6 +205,7 @@ export class GpuRenderer {
       indices,
       instances,
       indirect,
+      fallback: this.createFallback(scene),
       bindGroup,
       culler,
       pipelines: this.getPipelines(scene.vertices)
@@ -201,9 +213,23 @@ export class GpuRenderer {
     console.timeEnd('Uploading GPU buffers')
   }
 
+  /** A reduced command buffer for the one-call-per-draw path, on scenes too big for it. */
+  private createFallback (scene: GpuScene) {
+    if (drawCount(scene) <= this.maxFallbackDraws) return undefined
+    const draws = selectLargestDraws(scene, this.maxFallbackDraws)
+    const indirect = createBuffer(
+      this.ctx.device, draws.commands, GPUBufferUsage.INDIRECT, 'indirect fallback')
+    return { indirect, opaque: draws.opaque, transparent: draws.transparent }
+  }
+
   /** Number of draw commands in the current scene. */
   get drawCount (): number {
     return this.resources ? drawCount(this.resources.scene) : 0
+  }
+
+  /** True when the one-call-per-draw path is showing only the largest instances. */
+  get fallbackActive (): boolean {
+    return !!this.resources?.fallback && !(this.useMultiDraw && this.ctx.multiDraw)
   }
 
   /** True when either cull test is requested and the cull pass is usable. */
@@ -211,9 +237,11 @@ export class GpuRenderer {
     return (this.culling || this.contributionCulling) && this.useMultiDraw && this.ctx.multiDraw
   }
 
-  /** Commands that survived the last cull pass, or the whole scene when culling is off. */
+  /** Commands actually submitted: after culling, or the fallback subset, or the whole scene. */
   get drawnCount (): number {
     if (!this.resources) return 0
+    const fallback = this.fallbackActive ? this.resources.fallback : undefined
+    if (fallback) return fallback.opaque.count + fallback.transparent.count
     if (!this.cullingActive) return this.drawCount
     const [opaque, transparent] = this.resources.culler.drawnCounts
     return opaque + transparent
@@ -254,13 +282,15 @@ export class GpuRenderer {
     r.vertexBuffers.forEach((b, i) => pass.setVertexBuffer(i, b))
     pass.setIndexBuffer(r.indices, 'uint32')
 
-    const indirect = culler ? culler.visible : r.indirect
+    const fallback = this.fallbackActive ? r.fallback : undefined
+    const ranges = fallback ?? r.scene
+    const indirect = culler ? culler.visible : fallback ? fallback.indirect : r.indirect
 
     pass.setPipeline(r.pipelines.opaque)
-    this.drawRange(pass, indirect, r.scene.opaque, culler?.counts, OPAQUE_COUNT_OFFSET)
+    this.drawRange(pass, indirect, ranges.opaque, culler?.counts, OPAQUE_COUNT_OFFSET)
 
     pass.setPipeline(r.pipelines.transparent)
-    this.drawRange(pass, indirect, r.scene.transparent, culler?.counts, TRANSPARENT_COUNT_OFFSET)
+    this.drawRange(pass, indirect, ranges.transparent, culler?.counts, TRANSPARENT_COUNT_OFFSET)
 
     pass.end()
     this.ctx.device.queue.submit([encoder.finish()])
@@ -333,9 +363,9 @@ export class GpuRenderer {
     const r = this.resources
     if (!r) return
     r.culler.dispose()
-    for (const b of [...r.vertexBuffers, r.indices, r.instances, r.indirect]) {
-      b.destroy()
-    }
+    const owned = [...r.vertexBuffers, r.indices, r.instances, r.indirect]
+    if (r.fallback) owned.push(r.fallback.indirect)
+    for (const b of owned) b.destroy()
     this.resources = undefined
   }
 

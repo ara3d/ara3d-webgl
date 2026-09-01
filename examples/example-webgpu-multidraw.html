@@ -7,7 +7,7 @@
 <body>
 <script type="module">
 import { GpuModelLoader, GpuViewer, isGpuModelFile, isWebGpuAvailable, MULTI_DRAW_HELP } from '../src/gpu/index'
-import { createGpuPanel, showStats } from './gpuPanel.js'
+import { createGpuPanel, showStats, fmt } from './gpuPanel.js'
 
 const DEFAULT_MODEL = 'Snowdon Towers Sample Architectural.bos'
 
@@ -86,12 +86,20 @@ async function run () {
 
   viewer.setScene(model.scene)
   window.gpuDemo = { viewer, model, panel }
-  panel.setNote(
-    multiDraw
-      ? CONTROLS_HELP + ' Drop a .bos or .bfast file to load your own.'
-      : 'Multi-draw unavailable. ' + MULTI_DRAW_HELP)
+  panel.setNote(loadedNote(viewer, multiDraw), !multiDraw)
 
   enableFileDrop(panel, viewer, loader)
+}
+
+// Without multi-draw a huge model renders only its largest instances, so
+// say so instead of leaving the missing pieces a mystery.
+function loadedNote (viewer, multiDraw) {
+  if (multiDraw) return CONTROLS_HELP + ' Drop a .bos or .bfast file to load your own.'
+  const r = viewer.renderer
+  const limited = r.fallbackActive
+    ? `Showing the ${fmt(r.drawnCount)} largest of ${fmt(r.drawCount)} instances. `
+    : ''
+  return 'Multi-draw unavailable. ' + limited + MULTI_DRAW_HELP
 }
 
 function enableFileDrop (panel, viewer, loader) {
@@ -105,7 +113,7 @@ function enableFileDrop (panel, viewer, loader) {
     try {
       const model = await loader.loadFromFile(file)
       viewer.setScene(model.scene)
-      panel.setNote('Loaded ' + file.name)
+      panel.setNote('Loaded ' + file.name + '. ' + loadedNote(viewer, viewer.context.multiDraw))
     } catch (err) {
       panel.setNote('Failed to load ' + file.name + ': ' + err, true)
     }
