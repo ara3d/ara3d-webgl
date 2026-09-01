@@ -51,7 +51,7 @@ export class BFast {
 }
 
 /** True when `buffer` starts with the BFAST magic number. */
-export function isBFast (buffer: ArrayBuffer, byteOffset = 0): boolean {
+export function isBFast (buffer: ArrayBufferLike, byteOffset = 0): boolean {
   if (buffer.byteLength - byteOffset < PREAMBLE_BYTES) return false
   const view = new DataView(buffer, byteOffset, 8)
   return view.getUint32(0, true) === BFAST_MAGIC && view.getUint32(4, true) === 0
@@ -63,7 +63,7 @@ export function isBFast (buffer: ArrayBuffer, byteOffset = 0): boolean {
  * own. The prefix must cover the preamble, the ranges, and the name buffer;
  * `BFAST_HEADER_PROBE` bytes is enough for any file we write.
  */
-export function readBFastHeader (buffer: ArrayBuffer, byteOffset = 0): BFastRange[] {
+export function readBFastHeader (buffer: ArrayBufferLike, byteOffset = 0): BFastRange[] {
   if (!isBFast(buffer, byteOffset)) {
     const magic = buffer.byteLength >= byteOffset + 8
       ? new DataView(buffer, byteOffset, 8).getUint32(0, true).toString(16)
@@ -103,10 +103,30 @@ export function readBFastHeader (buffer: ArrayBuffer, byteOffset = 0): BFastRang
 export const BFAST_HEADER_PROBE = 64 * 1024
 
 /**
+ * How many bytes from the start of the file {@link readBFastHeader} needs,
+ * deduced from the bytes available so far, or undefined while even that cannot
+ * be told yet. A reader feeding a stream can call this after each chunk: the
+ * answer only ever grows, and settles after at most two rounds.
+ */
+export function bfastHeaderSize (buffer: ArrayBufferLike, byteOffset = 0): number | undefined {
+  const available = buffer.byteLength - byteOffset
+  if (available < PREAMBLE_BYTES) return undefined
+
+  const count = readInt64(new DataView(buffer, byteOffset, PREAMBLE_BYTES), 24)
+  if (count < 1) throw new Error(`BFAST has ${count} buffers; there must be at least one.`)
+
+  const rangesEnd = PREAMBLE_BYTES + count * RANGE_BYTES
+  if (available < rangesEnd) return rangesEnd
+
+  // The name buffer is the first range, and the last thing the header needs.
+  return readInt64(new DataView(buffer, byteOffset + PREAMBLE_BYTES, RANGE_BYTES), 8)
+}
+
+/**
  * Parses a BFAST file into its named buffers. The returned arrays are views on
  * `buffer`, so no bytes are copied and the file must be kept alive.
  */
-export function readBFast (buffer: ArrayBuffer, byteOffset = 0): BFast {
+export function readBFast (buffer: ArrayBufferLike, byteOffset = 0): BFast {
   const ranges = readBFastHeader(buffer, byteOffset)
   const available = buffer.byteLength - byteOffset
   return new BFast(ranges.map(({ name, begin, end }) => {
