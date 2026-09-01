@@ -6,7 +6,7 @@
 </head>
 <body>
 <script type="module">
-import { BosGpuLoader, GpuViewer, isWebGpuAvailable, MULTI_DRAW_HELP } from '../src/gpu/index'
+import { GpuModelLoader, GpuViewer, isGpuModelFile, isWebGpuAvailable, MULTI_DRAW_HELP } from '../src/gpu/index'
 import { createGpuPanel, showStats } from './gpuPanel.js'
 
 const DEFAULT_MODEL = 'Snowdon Towers Sample Architectural.bos'
@@ -16,7 +16,8 @@ const CONTROLS_HELP =
   'W/A/S/D or arrows fly, Q/E go down/up, +/- change speed, ' +
   'F frames the model, Home resets, P toggles orthographic.'
 
-// Pass ?model=stadium.bos to load one of the other bundled samples.
+// Pass ?model=stadium.bos to load one of the other bundled samples, or a
+// URL to a .bfast render model.
 const MODEL = '/ara3d-webgl/' +
   (new URLSearchParams(location.search).get('model') ?? DEFAULT_MODEL)
 
@@ -76,16 +77,16 @@ async function run () {
   viewer.start()
 
   panel.setNote('Loading model...')
-  const loader = new BosGpuLoader()
-  console.time('Loading .bos file')
+  const loader = new GpuModelLoader()
+  console.time('Loading model file')
   const model = await loader.load(MODEL)
-  console.timeEnd('Loading .bos file')
+  console.timeEnd('Loading model file')
 
   viewer.setScene(model.scene)
   window.gpuDemo = { viewer, model, panel }
   panel.setNote(
     multiDraw
-      ? CONTROLS_HELP + ' Drop a .bos file to load your own.'
+      ? CONTROLS_HELP + ' Drop a .bos or .bfast file to load your own.'
       : 'Multi-draw unavailable. ' + MULTI_DRAW_HELP)
 
   enableFileDrop(panel, viewer, loader)
@@ -96,7 +97,7 @@ function enableFileDrop (panel, viewer, loader) {
   window.addEventListener('dragover', stop)
   window.addEventListener('drop', async (e) => {
     stop(e)
-    const file = [...(e.dataTransfer?.files ?? [])].find((f) => f.name.toLowerCase().endsWith('.bos'))
+    const file = [...(e.dataTransfer?.files ?? [])].find((f) => isGpuModelFile(f.name))
     if (!file) return
     panel.setNote('Loading ' + file.name + '...')
     try {

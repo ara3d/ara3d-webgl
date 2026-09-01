@@ -1,9 +1,16 @@
+import { GpuVertexFormat } from '../gpuVertices'
+
 /**
  * Draws every instance of the model. `instance_index` picks the transform and
  * color, and it already includes the `firstInstance` field of the indirect
  * command, so one storage buffer serves every draw in a multi-draw call.
+ *
+ * Position components arrive either as scaled integers (BOS) or as floats
+ * (BFAST), so the attribute type follows the scene's vertex format.
  */
-export const sceneShader = /* wgsl */ `
+export const sceneShader = (format: GpuVertexFormat) => {
+  const t = format === 'sint32' ? 'i32' : 'f32'
+  return /* wgsl */ `
 struct Camera {
   viewProj : mat4x4<f32>,
   eye      : vec4<f32>,
@@ -27,9 +34,9 @@ struct VsOut {
 @vertex
 fn vs(
   @builtin(instance_index) id : u32,
-  @location(0) x : i32,
-  @location(1) y : i32,
-  @location(2) z : i32
+  @location(0) x : ${t},
+  @location(1) y : ${t},
+  @location(2) z : ${t}
 ) -> VsOut {
   let inst = instances[id];
   let local = vec3<f32>(f32(x), f32(y), f32(z)) * camera.params.x;
@@ -60,3 +67,4 @@ fn fs(in : VsOut) -> @location(0) vec4<f32> {
   return vec4<f32>(lit, in.color.a);
 }
 `
+}

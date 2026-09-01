@@ -4,21 +4,28 @@ import { GpuContext } from './gpuDevice'
 import { createBuffer } from './gpuBuffers'
 import { sceneShader } from './shaders/sceneShader'
 import { DRAW_COMMAND_WORDS, DrawRange, GpuScene, drawCount } from './gpuScene'
+import { GpuVertices } from './gpuVertices'
 import { GpuCuller, OPAQUE_COUNT_OFFSET, TRANSPARENT_COUNT_OFFSET } from './gpuCuller'
 
 const CAMERA_BYTES = 96 // mat4 + eye vec4 + params vec4
 const SAMPLE_COUNT = 4
 
+/** The two pipelines a vertex layout needs, kept so scenes of one format share them. */
+type ScenePipelines = {
+    opaque: GPURenderPipeline;
+    transparent: GPURenderPipeline;
+}
+
 type SceneResources = {
     scene: GpuScene;
-    vertexX: GPUBuffer;
-    vertexY: GPUBuffer;
-    vertexZ: GPUBuffer;
+    /** One buffer per vertex slot the scene's layout asks for. */
+    vertexBuffers: GPUBuffer[];
     indices: GPUBuffer;
     instances: GPUBuffer;
     indirect: GPUBuffer;
     bindGroup: GPUBindGroup;
     culler: GpuCuller;
+    pipelines: ScenePipelines;
 }
 
 /**
@@ -36,8 +43,7 @@ export class GpuRenderer {
   private readonly cameraBuffer: GPUBuffer
   private readonly cameraData = new Float32Array(CAMERA_BYTES / 4)
   private readonly layout: GPUBindGroupLayout
-  private readonly opaquePipeline: GPURenderPipeline
-  private readonly transparentPipeline: GPURenderPipeline
+  private readonly pipelineCache = new Map<string, ScenePipelines>()
 
   private resources: SceneResources | undefined
   private depth: GPUTexture | undefined
@@ -101,25 +107,41 @@ export class GpuRenderer {
         }
       ]
     })
-
-    const module = ctx.device.createShaderModule({ label: 'scene', code: sceneShader })
-    this.opaquePipeline = this.createPipeline(module, false)
-    this.transparentPipeline = this.createPipeline(module, true)
   }
 
-  private createPipeline (module: GPUShaderModule, transparent: boolean): GPURenderPipeline {
-    const column = (shaderLocation: number): GPUVertexBufferLayout => ({
-      arrayStride: 4,
-      attributes: [{ shaderLocation, offset: 0, format: 'sint32' }]
-    })
+  /**
+   * Pipelines depend on the scene's vertex layout, so they are built on first
+   * use and reused by every later scene with the same layout.
+   */
+  private getPipelines (vertices: GpuVertices): ScenePipelines {
+    const key = pipelineKey(vertices)
+    const cached = this.pipelineCache.get(key)
+    if (cached) return cached
 
+    const module = this.ctx.device.createShaderModule({
+      label: 'scene',
+      code: sceneShader(vertices.format)
+    })
+    const pipelines = {
+      opaque: this.createPipeline(module, vertices, false),
+      transparent: this.createPipeline(module, vertices, true)
+    }
+    this.pipelineCache.set(key, pipelines)
+    return pipelines
+  }
+
+  private createPipeline (
+    module: GPUShaderModule,
+    vertices: GpuVertices,
+    transparent: boolean
+  ): GPURenderPipeline {
     return this.ctx.device.createRenderPipeline({
       label: transparent ? 'transparent' : 'opaque',
       layout: this.ctx.device.createPipelineLayout({ bindGroupLayouts: [this.layout] }),
       vertex: {
         module,
         entryPoint: 'vs',
-        buffers: [column(0), column(1), column(2)]
+        buffers: vertexLayouts(vertices)
       },
       fragment: {
         module,
@@ -144,9 +166,8 @@ export class GpuRenderer {
     const device = this.ctx.device
     this.releaseScene()
 
-    const vertexX = createBuffer(device, scene.vertexX, GPUBufferUsage.VERTEX, 'vertexX')
-    const vertexY = createBuffer(device, scene.vertexY, GPUBufferUsage.VERTEX, 'vertexY')
-    const vertexZ = createBuffer(device, scene.vertexZ, GPUBufferUsage.VERTEX, 'vertexZ')
+    const vertexBuffers = scene.vertices.buffers.map((b, i) =>
+      createBuffer(device, b.data, GPUBufferUsage.VERTEX, `vertices${i}`))
     const indices = createBuffer(device, scene.indices, GPUBufferUsage.INDEX, 'indices')
     const instances = createBuffer(device, scene.instanceData, GPUBufferUsage.STORAGE, 'instances')
     const indirect = createBuffer(
@@ -166,7 +187,14 @@ export class GpuRenderer {
     const culler = new GpuCuller(device, scene, indirect)
 
     this.resources = {
-      scene, vertexX, vertexY, vertexZ, indices, instances, indirect, bindGroup, culler
+      scene,
+      vertexBuffers,
+      indices,
+      instances,
+      indirect,
+      bindGroup,
+      culler,
+      pipelines: this.getPipelines(scene.vertices)
     }
     console.timeEnd('Uploading GPU buffers')
   }
@@ -194,7 +222,7 @@ export class GpuRenderer {
     if (!r) return
 
     this.resize()
-    this.updateCamera(viewProj, eye, r.scene.vertexScale)
+    this.updateCamera(viewProj, eye, r.scene.vertices.scale)
 
     const encoder = this.ctx.device.createCommandEncoder()
     const culler = this.cullingActive ? r.culler : undefined
@@ -221,17 +249,15 @@ export class GpuRenderer {
     })
 
     pass.setBindGroup(0, r.bindGroup)
-    pass.setVertexBuffer(0, r.vertexX)
-    pass.setVertexBuffer(1, r.vertexY)
-    pass.setVertexBuffer(2, r.vertexZ)
+    r.vertexBuffers.forEach((b, i) => pass.setVertexBuffer(i, b))
     pass.setIndexBuffer(r.indices, 'uint32')
 
     const indirect = culler ? culler.visible : r.indirect
 
-    pass.setPipeline(this.opaquePipeline)
+    pass.setPipeline(r.pipelines.opaque)
     this.drawRange(pass, indirect, r.scene.opaque, culler?.counts, OPAQUE_COUNT_OFFSET)
 
-    pass.setPipeline(this.transparentPipeline)
+    pass.setPipeline(r.pipelines.transparent)
     this.drawRange(pass, indirect, r.scene.transparent, culler?.counts, TRANSPARENT_COUNT_OFFSET)
 
     pass.end()
@@ -305,7 +331,7 @@ export class GpuRenderer {
     const r = this.resources
     if (!r) return
     r.culler.dispose()
-    for (const b of [r.vertexX, r.vertexY, r.vertexZ, r.indices, r.instances, r.indirect]) {
+    for (const b of [...r.vertexBuffers, r.indices, r.instances, r.indirect]) {
       b.destroy()
     }
     this.resources = undefined
@@ -318,6 +344,16 @@ export class GpuRenderer {
     this.cameraBuffer.destroy()
   }
 }
+
+/** Vertex buffer layouts matching the scene's description. */
+const vertexLayouts = (v: GpuVertices): GPUVertexBufferLayout[] =>
+  v.buffers.map((b) => ({
+    arrayStride: b.stride,
+    attributes: b.attributes.map((a) => ({ ...a, format: v.format as GPUVertexFormat }))
+  }))
+
+const pipelineKey = (v: GpuVertices) =>
+  v.format + '|' + JSON.stringify(v.buffers.map((b) => [b.stride, b.attributes]))
 
 const BLEND_OVER: GPUBlendState = {
   color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },

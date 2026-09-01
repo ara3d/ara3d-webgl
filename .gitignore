@@ -15,3 +15,7 @@ node_modules/*
 #ignore models
 models/*
 
+
+#ignore generated test fixtures and harness bundles
+out/*
+examples/public/*.bfast

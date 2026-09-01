@@ -1,3 +1,5 @@
+import { GpuVertices } from './gpuVertices'
+
 /** Number of 32-bit words in one `DrawIndexedIndirect` command. */
 export const DRAW_COMMAND_WORDS = 5
 
@@ -15,13 +17,8 @@ export type DrawRange = {
  * All arrays are plain typed arrays, ready to be uploaded without further work.
  */
 export type GpuScene = {
-    /** Raw BOS vertex columns (integers scaled by `vertexScale`). */
-    vertexX: Int32Array;
-    vertexY: Int32Array;
-    vertexZ: Int32Array;
-
-    /** Multiply a vertex column value by this to get model units. */
-    vertexScale: number;
+    /** Vertex positions, with the layout the renderer must bind them with. */
+    vertices: GpuVertices;
 
     /** Mesh-local indices; each draw command supplies its own base vertex. */
     indices: Uint32Array;
