@@ -49,8 +49,19 @@ export async function streamGpuScene (
 
   const reader = new BFastStreamReader(sinkFor)
   try {
-    for await (const chunk of chunks) reader.push(chunk)
+    const stats = { waitMs: 0, pushMs: 0, chunks: 0, bytes: 0 }
+    let mark = performance.now()
+    for await (const chunk of chunks) {
+      const arrived = performance.now()
+      stats.waitMs += arrived - mark
+      reader.push(chunk)
+      mark = performance.now()
+      stats.pushMs += mark - arrived
+      stats.chunks++
+      stats.bytes += chunk.length
+    }
     reader.end()
+    logStreamStats(stats)
 
     const model = readRenderModelTables((name) => {
       const bytes = tables.get(name)
@@ -72,6 +83,22 @@ export async function streamGpuScene (
     for (const { buffer } of uploaded.values()) buffer.destroy()
     throw e
   }
+}
+
+/**
+ * Says whether a streamed load spent its time waiting for bytes (network or
+ * disk bound) or handing them to the GPU (CPU bound), to guide optimization.
+ */
+function logStreamStats (stats: { waitMs: number; pushMs: number; chunks: number; bytes: number }) {
+  const { waitMs, pushMs, chunks, bytes } = stats
+  const mb = bytes / (1024 * 1024)
+  const totalS = (waitMs + pushMs) / 1000
+  console.log(
+    `Streamed ${mb.toFixed(1)} MB in ${totalS.toFixed(2)} s ` +
+    `(${(mb / totalS).toFixed(0)} MB/s): ` +
+    `${(waitMs / 1000).toFixed(2)} s awaiting bytes, ` +
+    `${(pushMs / 1000).toFixed(2)} s pushing to GPU, ` +
+    `${chunks} chunks averaging ${(bytes / chunks / 1024).toFixed(0)} KB`)
 }
 
 const found = (ranges: BFastRange[] | undefined) =>
