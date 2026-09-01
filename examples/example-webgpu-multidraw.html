@@ -67,6 +67,21 @@ async function run () {
     viewer.renderer.contributionThreshold = panel.contributionPixels()
   })
 
+  panel.backFaceToggle.checked = viewer.renderer.backFaceCulling
+  panel.backFaceToggle.addEventListener('change', () => {
+    viewer.renderer.backFaceCulling = panel.backFaceToggle.checked
+  })
+
+  panel.sortToggle.checked = viewer.renderer.frontToBackSort
+  panel.sortToggle.addEventListener('change', () => {
+    viewer.renderer.frontToBackSort = panel.sortToggle.checked
+  })
+
+  panel.msaaToggle.checked = viewer.renderer.msaa
+  panel.msaaToggle.addEventListener('change', () => {
+    viewer.renderer.msaa = panel.msaaToggle.checked
+  })
+
   panel.setMoveSpeed(viewer.controls.speed)
   panel.speedSlider.addEventListener('input', () => {
     panel.showMoveSpeed()
