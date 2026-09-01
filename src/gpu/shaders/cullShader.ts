@@ -37,10 +37,12 @@ fn outsideFrustum(sphere : vec4<f32>) -> bool {
 }
 
 /// True when the sphere projects to less than the minimum diameter in pixels.
-/// Spheres reaching the eye have no meaningful projected size, so they are kept.
+/// A centre at or behind the eye has no projected size, so it is kept; near the
+/// eye the size grows without bound and passes on its own. In an orthographic
+/// projection the depth row is constant 1, which makes the test exact.
 fn tooSmall(sphere : vec4<f32>, minPixels : f32) -> bool {
   let depth = dot(cull.depth.xyz, sphere.xyz) + cull.depth.w;
-  if (depth <= sphere.w) { return false; }
+  if (depth <= 0.0) { return false; }
   return 2.0 * sphere.w * cull.limits.x / depth < minPixels;
 }
 

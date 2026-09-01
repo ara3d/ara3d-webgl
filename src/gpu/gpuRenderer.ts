@@ -259,7 +259,7 @@ export class GpuRenderer {
     culler?.cull(encoder, viewProj, {
       frustum: this.culling,
       minPixels: this.contributionCulling ? this.contributionThreshold : 0,
-      viewportHeight: this.height
+      viewportHeight: Math.max(1, this.canvas.clientHeight)
     })
 
     const pass = encoder.beginRenderPass({

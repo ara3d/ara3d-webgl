@@ -18,7 +18,7 @@ export type CullParams = {
     frustum: boolean;
     /** Drop instances projecting to less than this many pixels across. Zero disables. */
     minPixels: number;
-    /** Viewport height in device pixels, which sets the scale of `minPixels`. */
+    /** Viewport height in CSS pixels, so `minPixels` means what a viewer sees. */
     viewportHeight: number;
 }
 
