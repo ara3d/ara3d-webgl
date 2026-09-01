@@ -143,14 +143,16 @@ export function collectVisibleInstances (model: RenderModelTables): Int32Array {
   const opaque: number[] = []
   const transparent: number[] = []
 
+  let hidden = 0
   for (let i = 0; i < count; i++) {
     const mesh = instanceMeshIndex(model, i)
     if (mesh < 0) continue
-    if (instanceHidden(model, i)) continue
+    if (instanceHidden(model, i)) { hidden++; continue }
     if (model.meshSlices[mesh * MESH_SLICE_INTS + 3] === 0) continue
     ;(instanceAlpha(model, i) < 255 ? transparent : opaque).push(i)
   }
 
+  if (hidden > 0) console.log(`Skipped ${hidden} hidden instances`)
   return Int32Array.from(opaque.concat(transparent))
 }
 
