@@ -2,14 +2,16 @@
 import * as THREE from 'three'
 import { createBuffer, createEmptyBuffer } from './gpuBuffers'
 import { cullShader } from './shaders/cullShader'
+import { ORDER_BUCKETS, orderedCullShader } from './shaders/orderedCullShader'
 import { writeFrustumPlanes } from './frustum'
 import { pixelsPerUnitAtUnitDepth, writeDepthPlane } from './screenSize'
 import { GpuScene, instanceCount } from './gpuScene'
 
-const CULL_UNIFORM_BYTES = 208 // planes, counts, depth plane, limits, view-projection
+const CULL_UNIFORM_BYTES = 224 // planes, counts, depth plane, limits, view-projection, order
 const DEPTH_PLANE_FLOAT = 28 // byte 112
 const LIMITS_FLOAT = 32 // byte 128
 const VIEW_PROJ_FLOAT = 36 // byte 144
+const ORDER_FLOAT = 52 // byte 208
 const WORKGROUP_SIZE = 64
 const COUNTS_BYTES = 8 // one u32 per draw range
 
@@ -30,11 +32,27 @@ export type CullParams = {
     viewportHeight: number;
     /** Test each sphere against this depth pyramid. Absent disables. */
     pyramid?: CullPyramid;
+    /** Compact the opaque survivors grouped by depth, nearest first. */
+    order?: boolean;
 }
 
 /** Byte offset of a range's draw counter inside the counts buffer. */
 export const OPAQUE_COUNT_OFFSET = 0
 export const TRANSPARENT_COUNT_OFFSET = 4
+
+/** The pipelines and buffers of the depth-ordered compaction, built on first use. */
+type OrderedResources = {
+    count: GPUComputePipeline;
+    scan: GPUComputePipeline;
+    scatter: GPUComputePipeline;
+    /** Per-bucket tallies, turned into cursors by the scan pass. */
+    buckets: GPUBuffer;
+    /** Per-instance cull verdict, written by count and read by scatter. */
+    verdicts: GPUBuffer;
+    countBind: GPUBindGroup;
+    scanBind: GPUBindGroup;
+    scatterBind: GPUBindGroup;
+}
 
 /**
  * Compacts the indirect commands of the visible instances into a second buffer
@@ -87,6 +105,8 @@ export class GpuCuller {
     this.info = new Uint32Array(this.uniformData.buffer, 96, 4)
     this.info[0] = n
     this.info[1] = scene.transparent.first
+    this.boundsMin = scene.boundsMin
+    this.boundsMax = scene.boundsMax
 
     this.pipeline = device.createComputePipeline({
       label: 'cull',
@@ -109,6 +129,10 @@ export class GpuCuller {
 
   private readonly source: GPUBuffer
   private readonly dummyView: GPUTextureView
+  private readonly boundsMin: [number, number, number]
+  private readonly boundsMax: [number, number, number]
+  private readonly bucketZeros = new Uint32Array(ORDER_BUCKETS)
+  private ordered: OrderedResources | undefined
 
   private createBindGroup (pyramid: GPUTextureView): GPUBindGroup {
     return this.device.createBindGroup({
@@ -144,22 +168,118 @@ export class GpuCuller {
     this.uniformData[LIMITS_FLOAT + 2] = params.pyramid?.width ?? 1
     this.uniformData[LIMITS_FLOAT + 3] = params.pyramid?.height ?? 1
     this.uniformData.set(viewProj.elements, VIEW_PROJ_FLOAT)
+    if (params.order) this.writeOrderRange(viewProj)
     this.device.queue.writeBuffer(this.uniform, 0, this.uniformData)
 
     // Rebound only when the pyramid texture changes, e.g. after a resize.
     if (params.pyramid?.view !== this.boundPyramid) {
       this.boundPyramid = params.pyramid?.view
-      this.bindGroup = this.createBindGroup(params.pyramid?.view ?? this.dummyView)
+      const view = params.pyramid?.view ?? this.dummyView
+      this.bindGroup = this.createBindGroup(view)
+      if (this.ordered) this.ordered.countBind = this.createCountBind(this.ordered, view)
     }
     this.device.queue.writeBuffer(this.counts, 0, this.zeros)
 
     const pass = encoder.beginComputePass({ label: 'cull' })
-    pass.setPipeline(this.pipeline)
-    pass.setBindGroup(0, this.bindGroup)
-    pass.dispatchWorkgroups(this.groups)
+    if (params.order) {
+      const o = this.ensureOrdered()
+      this.device.queue.writeBuffer(o.buckets, 0, this.bucketZeros)
+      pass.setPipeline(o.count)
+      pass.setBindGroup(0, o.countBind)
+      pass.dispatchWorkgroups(this.groups)
+      pass.setPipeline(o.scan)
+      pass.setBindGroup(0, o.scanBind)
+      pass.dispatchWorkgroups(1)
+      pass.setPipeline(o.scatter)
+      pass.setBindGroup(0, o.scatterBind)
+      pass.dispatchWorkgroups(this.groups)
+    } else {
+      pass.setPipeline(this.pipeline)
+      pass.setBindGroup(0, this.bindGroup)
+      pass.dispatchWorkgroups(this.groups)
+    }
     pass.end()
 
     if (!this.reading) encoder.copyBufferToBuffer(this.counts, 0, this.readback, 0, COUNTS_BYTES)
+  }
+
+  /**
+   * The linear view-depth scale the bucketing uses: from the nearest to the
+   * farthest corner of the scene bounds, under the current view.
+   */
+  private writeOrderRange (viewProj: THREE.Matrix4) {
+    const e = viewProj.elements
+    let min = Infinity
+    let max = -Infinity
+    for (let c = 0; c < 8; c++) {
+      const x = c & 1 ? this.boundsMax[0] : this.boundsMin[0]
+      const y = c & 2 ? this.boundsMax[1] : this.boundsMin[1]
+      const z = c & 4 ? this.boundsMax[2] : this.boundsMin[2]
+      const d = e[3] * x + e[7] * y + e[11] * z + e[15]
+      min = Math.min(min, d)
+      max = Math.max(max, d)
+    }
+    this.uniformData[ORDER_FLOAT] = min
+    this.uniformData[ORDER_FLOAT + 1] = ORDER_BUCKETS / Math.max(max - min, 1e-6)
+  }
+
+  private ensureOrdered (): OrderedResources {
+    if (this.ordered) return this.ordered
+    const device = this.device
+    const module = device.createShaderModule({ label: 'ordered cull', code: orderedCullShader })
+    const pipeline = (entryPoint: string) => device.createComputePipeline({
+      label: 'cull ' + entryPoint,
+      layout: 'auto',
+      compute: { module, entryPoint }
+    })
+
+    const count = pipeline('count')
+    const scan = pipeline('scan')
+    const scatter = pipeline('scatter')
+    const buckets = createEmptyBuffer(
+      device, ORDER_BUCKETS * 4, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, 'buckets')
+    const verdicts = createEmptyBuffer(
+      device, Math.max(this.info[0], 1) * 4, GPUBufferUsage.STORAGE, 'verdicts')
+
+    const partial = { count, scan, scatter, buckets, verdicts }
+    const scanBind = device.createBindGroup({
+      layout: scan.getBindGroupLayout(0),
+      entries: [
+        { binding: 4, resource: { buffer: this.counts } },
+        { binding: 6, resource: { buffer: buckets } }
+      ]
+    })
+    const scatterBind = device.createBindGroup({
+      layout: scatter.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.uniform } },
+        { binding: 2, resource: { buffer: this.source } },
+        { binding: 3, resource: { buffer: this.visible } },
+        { binding: 4, resource: { buffer: this.counts } },
+        { binding: 6, resource: { buffer: buckets } },
+        { binding: 7, resource: { buffer: verdicts } }
+      ]
+    })
+    const countBind = this.createCountBind(partial, this.boundPyramid ?? this.dummyView)
+
+    this.ordered = { ...partial, countBind, scanBind, scatterBind }
+    return this.ordered
+  }
+
+  private createCountBind (
+    ordered: Pick<OrderedResources, 'count' | 'buckets' | 'verdicts'>,
+    pyramid: GPUTextureView
+  ): GPUBindGroup {
+    return this.device.createBindGroup({
+      layout: ordered.count.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.uniform } },
+        { binding: 1, resource: { buffer: this.spheres } },
+        { binding: 5, resource: pyramid },
+        { binding: 6, resource: { buffer: ordered.buckets } },
+        { binding: 7, resource: { buffer: ordered.verdicts } }
+      ]
+    })
   }
 
   /** Draw counts from a recent frame: opaque then transparent. Lags by a frame or two. */
@@ -181,6 +301,8 @@ export class GpuCuller {
     for (const b of [this.spheres, this.visible, this.counts, this.readback, this.uniform]) {
       b.destroy()
     }
+    this.ordered?.buckets.destroy()
+    this.ordered?.verdicts.destroy()
     this.dummyPyramid.destroy()
   }
 }

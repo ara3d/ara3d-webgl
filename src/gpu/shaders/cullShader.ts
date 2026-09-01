@@ -13,7 +13,12 @@
  * Opaque instances occupy the front of the instance range and transparent ones
  * the back, so each group compacts into its own half of the output buffer.
  */
-export const cullShader = /* wgsl */ `
+
+/**
+ * The uniform, the shared bindings and the three tests, shared by this shader
+ * and the ordered variant in `orderedCullShader.ts`.
+ */
+export const cullCommon = /* wgsl */ `
 struct Cull {
   planes   : array<vec4<f32>, 6>,
   info     : vec4<u32>,   // x: instance count, y: first transparent instance,
@@ -22,6 +27,8 @@ struct Cull {
   limits   : vec4<f32>,   // x: pixels per world unit at unit depth,
                           // y: minimum diameter in pixels, zw: pyramid mip 0 size
   viewProj : mat4x4<f32>,
+  order    : vec4<f32>,   // x: view depth of the nearest scene corner,
+                          // y: buckets per unit of view depth
 };
 
 @group(0) @binding(0) var<uniform> cull : Cull;
@@ -90,18 +97,22 @@ fn occluded(sphere : vec4<f32>) -> bool {
   return clamp(minN.z, 0.0, 1.0) > farthest;
 }
 
+/// True when any enabled test rejects the sphere.
+fn culled(sphere : vec4<f32>) -> bool {
+  if (cull.info.z != 0u && outsideFrustum(sphere)) { return true; }
+  let minPixels = cull.limits.y;
+  if (minPixels > 0.0 && tooSmall(sphere, minPixels)) { return true; }
+  if (cull.info.w != 0u && occluded(sphere)) { return true; }
+  return false;
+}
+`
+
+export const cullShader = cullCommon + /* wgsl */ `
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
   let i = gid.x;
   if (i >= cull.info.x) { return; }
-
-  let sphere = spheres[i];
-  if (cull.info.z != 0u && outsideFrustum(sphere)) { return; }
-
-  let minPixels = cull.limits.y;
-  if (minPixels > 0.0 && tooSmall(sphere, minPixels)) { return; }
-
-  if (cull.info.w != 0u && occluded(sphere)) { return; }
+  if (culled(spheres[i])) { return; }
 
   let transparent = i >= cull.info.y;
   let slot = select(0u, 1u, transparent);

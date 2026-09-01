@@ -73,10 +73,12 @@ export class GpuRenderer {
   backFaceCulling = true
 
   /**
-   * Keep the opaque draw commands roughly sorted front to back, so early
-   * depth testing rejects hidden fragments before they are shaded.
-   * Off by default: the CPU sort and re-upload cause a noticeable stutter
-   * on large models.
+   * Draw the opaque commands roughly front to back, so early depth testing
+   * rejects hidden fragments before they are shaded. With the multi-draw
+   * extension the ordering runs on the GPU inside the cull pass each frame,
+   * grouping survivors into depth buckets at no CPU cost; without it a
+   * throttled CPU sort re-uploads the commands, which can stutter on large
+   * models.
    */
   frontToBackSort = false
 
@@ -107,12 +109,8 @@ export class GpuRenderer {
    */
   occlusionCulling = false
 
-  /**
-   * Minimum projected diameter in pixels. The default is deliberately tiny:
-   * BIM models are full of small repeated elements, and dropping them at
-   * different distances makes an object look wrong rather than just cheaper.
-   */
-  contributionThreshold = 0.1
+  /** Minimum projected diameter in pixels for the contribution test. */
+  contributionThreshold = 1.0
 
   /**
    * Without the multi-draw extension every draw command costs a separate call
@@ -279,10 +277,15 @@ export class GpuRenderer {
     return !!this.resources?.fallback && !(this.useMultiDraw && this.ctx.multiDraw)
   }
 
-  /** True when any cull test is requested and the cull pass is usable. */
+  /** True when any cull test or the GPU ordering asks for the cull pass, and it is usable. */
   get cullingActive (): boolean {
-    return (this.culling || this.contributionCulling || this.occlusionCulling) &&
-      this.useMultiDraw && this.ctx.multiDraw
+    return (this.culling || this.contributionCulling || this.occlusionCulling ||
+      this.frontToBackSort) && this.useMultiDraw && this.ctx.multiDraw
+  }
+
+  /** True when the cull pass orders the opaque draws on the GPU. */
+  private get orderingActive (): boolean {
+    return this.frontToBackSort && this.useMultiDraw && this.ctx.multiDraw
   }
 
   /** True when the occlusion test can run: flagged on, and the pass usable. */
@@ -306,7 +309,8 @@ export class GpuRenderer {
 
     this.resize()
     this.updateCamera(viewProj, eye, r.scene.vertices.scale)
-    if (this.frontToBackSort) this.sortOpaqueDraws(eye)
+    // The GPU ordering covers the CPU sort's job when the cull pass runs.
+    if (this.frontToBackSort && !this.orderingActive) this.sortOpaqueDraws(eye)
 
     // The occlusion test reads the pyramid built at the end of the previous
     // frame; until one exists for the current size, the test is skipped.
@@ -324,7 +328,8 @@ export class GpuRenderer {
       frustum: this.culling,
       minPixels: this.contributionCulling ? this.contributionThreshold : 0,
       viewportHeight: Math.max(1, this.canvas.clientHeight),
-      pyramid: occlusion ? this.hiZ?.cullPyramid : undefined
+      pyramid: occlusion ? this.hiZ?.cullPyramid : undefined,
+      order: this.orderingActive
     })
 
     const target = this.context.getCurrentTexture().createView()
