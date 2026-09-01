@@ -4,20 +4,24 @@
  * `multiDrawIndexedIndirect` reads, so the CPU never learns how many instances
  * were visible.
  *
- * Two tests share the pass and each can be switched off from the host: the
- * frustum test rejects instances outside the view, and the contribution test
+ * Three tests share the pass and each can be switched off from the host: the
+ * frustum test rejects instances outside the view, the contribution test
  * rejects instances whose bounding sphere projects to fewer than a given number
- * of pixels across.
+ * of pixels across, and the occlusion test rejects instances hidden behind the
+ * depth pyramid built from the previous frame.
  *
  * Opaque instances occupy the front of the instance range and transparent ones
  * the back, so each group compacts into its own half of the output buffer.
  */
 export const cullShader = /* wgsl */ `
 struct Cull {
-  planes : array<vec4<f32>, 6>,
-  info   : vec4<u32>,   // x: instance count, y: first transparent instance, z: 1 to frustum cull
-  depth  : vec4<f32>,   // dot(xyz, p) + w is the view depth of the point p
-  limits : vec4<f32>,   // x: pixels per world unit at unit depth, y: minimum diameter in pixels
+  planes   : array<vec4<f32>, 6>,
+  info     : vec4<u32>,   // x: instance count, y: first transparent instance,
+                          // z: 1 to frustum cull, w: 1 to occlusion cull
+  depth    : vec4<f32>,   // dot(xyz, p) + w is the view depth of the point p
+  limits   : vec4<f32>,   // x: pixels per world unit at unit depth,
+                          // y: minimum diameter in pixels, zw: pyramid mip 0 size
+  viewProj : mat4x4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> cull : Cull;
@@ -25,6 +29,7 @@ struct Cull {
 @group(0) @binding(2) var<storage, read> source : array<u32>;
 @group(0) @binding(3) var<storage, read_write> visible : array<u32>;
 @group(0) @binding(4) var<storage, read_write> counts : array<atomic<u32>, 2>;
+@group(0) @binding(5) var pyramid : texture_2d<f32>;
 
 const WORDS : u32 = 5u;   // one DrawIndexedIndirect command
 
@@ -46,6 +51,45 @@ fn tooSmall(sphere : vec4<f32>, minPixels : f32) -> bool {
   return 2.0 * sphere.w * cull.limits.x / depth < minPixels;
 }
 
+/// True when the sphere is hidden everywhere behind last frame's depth.
+/// The sphere's world axis-aligned box is projected; because a projective map
+/// carries a box in front of the eye to the convex hull of its corners, the
+/// corner bounds enclose the sphere's footprint and nearest depth. The mip
+/// where the rectangle spans at most one texel is tested with the 2x2 texels
+/// that cover it, each holding the farthest depth beneath it.
+fn occluded(sphere : vec4<f32>) -> bool {
+  var minN = vec3<f32>(1e30);
+  var maxN = vec3<f32>(-1e30);
+  for (var c = 0u; c < 8u; c = c + 1u) {
+    let corner = sphere.xyz + sphere.w * (vec3<f32>(
+      f32(c & 1u), f32((c >> 1u) & 1u), f32((c >> 2u) & 1u)) * 2.0 - 1.0);
+    let clip = cull.viewProj * vec4<f32>(corner, 1.0);
+    if (clip.w <= 0.0) { return false; }   // reaches behind the eye: keep
+    let ndc = clip.xyz / clip.w;
+    minN = min(minN, ndc);
+    maxN = max(maxN, ndc);
+  }
+
+  // NDC y points up, texture y points down.
+  let size = cull.limits.zw;
+  let lo = clamp(vec2<f32>(minN.x, -maxN.y) * 0.5 + 0.5, vec2<f32>(0.0), vec2<f32>(1.0)) * size;
+  let hi = clamp(vec2<f32>(maxN.x, -minN.y) * 0.5 + 0.5, vec2<f32>(0.0), vec2<f32>(1.0)) * size;
+
+  let extent = max(max(hi.x - lo.x, hi.y - lo.y), 1.0);
+  let mips = f32(textureNumLevels(pyramid));
+  let lod = clamp(ceil(log2(extent)), 0.0, mips - 1.0);
+  let li = i32(lod);
+  let lsize = max(vec2<i32>(size) >> vec2<u32>(u32(li)), vec2<i32>(1));
+  let scale = exp2(-lod);
+  let c0 = clamp(vec2<i32>(lo * scale), vec2<i32>(0), lsize - 1);
+  let c1 = clamp(vec2<i32>(hi * scale), vec2<i32>(0), lsize - 1);
+
+  let farthest = max(
+    max(textureLoad(pyramid, c0, li).x, textureLoad(pyramid, vec2<i32>(c1.x, c0.y), li).x),
+    max(textureLoad(pyramid, vec2<i32>(c0.x, c1.y), li).x, textureLoad(pyramid, c1, li).x));
+  return clamp(minN.z, 0.0, 1.0) > farthest;
+}
+
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
   let i = gid.x;
@@ -56,6 +100,8 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 
   let minPixels = cull.limits.y;
   if (minPixels > 0.0 && tooSmall(sphere, minPixels)) { return; }
+
+  if (cull.info.w != 0u && occluded(sphere)) { return; }
 
   let transparent = i >= cull.info.y;
   let slot = select(0u, 1u, transparent);

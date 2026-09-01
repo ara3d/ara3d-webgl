@@ -8,6 +8,7 @@ import { selectLargestDraws } from './fallbackDraws'
 import { GpuVertices } from './gpuVertices'
 import { GpuCuller, OPAQUE_COUNT_OFFSET, TRANSPARENT_COUNT_OFFSET } from './gpuCuller'
 import { sortDrawsFrontToBack } from './drawOrder'
+import { HiZPyramid } from './hiZ'
 
 const CAMERA_BYTES = 96 // mat4 + eye vec4 + params vec4
 const MSAA_SAMPLES = 4
@@ -54,6 +55,7 @@ export class GpuRenderer {
   private resources: SceneResources | undefined
   private depth: GPUTexture | undefined
   private color: GPUTexture | undefined
+  private hiZ: HiZPyramid | undefined
   private width = 0
   private height = 0
   private samples = 0
@@ -95,6 +97,15 @@ export class GpuRenderer {
    * two compose. Off by default, and it needs the multi-draw extension too.
    */
   contributionCulling = false
+
+  /**
+   * Optional GPU occlusion culling: instances hidden behind what the previous
+   * frame drew are skipped, tested against a depth pyramid built after each
+   * frame. Shares the cull pass with the other tests and needs the multi-draw
+   * extension too. The one-frame lag can make geometry pop in for a frame
+   * after fast camera motion. Off by default.
+   */
+  occlusionCulling = false
 
   /**
    * Minimum projected diameter in pixels. The default is deliberately tiny:
@@ -244,6 +255,8 @@ export class GpuRenderer {
     }
     this.lastSortTime = 0
     this.lastSortEye.set(Infinity, Infinity, Infinity)
+    // The pyramid depicts the old scene; do not occlude against it.
+    this.hiZ?.invalidate()
     console.timeEnd('Uploading GPU buffers')
   }
 
@@ -266,9 +279,15 @@ export class GpuRenderer {
     return !!this.resources?.fallback && !(this.useMultiDraw && this.ctx.multiDraw)
   }
 
-  /** True when either cull test is requested and the cull pass is usable. */
+  /** True when any cull test is requested and the cull pass is usable. */
   get cullingActive (): boolean {
-    return (this.culling || this.contributionCulling) && this.useMultiDraw && this.ctx.multiDraw
+    return (this.culling || this.contributionCulling || this.occlusionCulling) &&
+      this.useMultiDraw && this.ctx.multiDraw
+  }
+
+  /** True when the occlusion test can run: flagged on, and the pass usable. */
+  private get occlusionActive (): boolean {
+    return this.occlusionCulling && this.useMultiDraw && this.ctx.multiDraw
   }
 
   /** Commands actually submitted: after culling, or the fallback subset, or the whole scene. */
@@ -289,12 +308,23 @@ export class GpuRenderer {
     this.updateCamera(viewProj, eye, r.scene.vertices.scale)
     if (this.frontToBackSort) this.sortOpaqueDraws(eye)
 
+    // The occlusion test reads the pyramid built at the end of the previous
+    // frame; until one exists for the current size, the test is skipped.
+    const occlusion = this.occlusionActive
+    if (occlusion && !this.hiZ) {
+      this.hiZ = new HiZPyramid(this.ctx.device)
+      this.hiZ.configure(this.depth, this.samples)
+    }
+    // While the test is off no pyramid is built, so what exists goes stale.
+    if (!occlusion) this.hiZ?.invalidate()
+
     const encoder = this.ctx.device.createCommandEncoder()
     const culler = this.cullingActive ? r.culler : undefined
     culler?.cull(encoder, viewProj, {
       frustum: this.culling,
       minPixels: this.contributionCulling ? this.contributionThreshold : 0,
-      viewportHeight: Math.max(1, this.canvas.clientHeight)
+      viewportHeight: Math.max(1, this.canvas.clientHeight),
+      pyramid: occlusion ? this.hiZ?.cullPyramid : undefined
     })
 
     const target = this.context.getCurrentTexture().createView()
@@ -318,7 +348,8 @@ export class GpuRenderer {
         view: this.depth.createView(),
         depthClearValue: 1,
         depthLoadOp: 'clear',
-        depthStoreOp: 'discard'
+        // The pyramid build after the pass reads the depth buffer.
+        depthStoreOp: occlusion ? 'store' : 'discard'
       }
     })
 
@@ -338,6 +369,7 @@ export class GpuRenderer {
     this.drawRange(pass, indirect, ranges.transparent, culler?.counts, TRANSPARENT_COUNT_OFFSET)
 
     pass.end()
+    if (occlusion) this.hiZ.build(encoder)
     this.ctx.device.queue.submit([encoder.finish()])
     culler?.pollCounts()
   }
@@ -429,8 +461,9 @@ export class GpuRenderer {
       size: [width, height],
       format: 'depth24plus',
       sampleCount: samples,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
     })
+    this.hiZ?.configure(this.depth, samples)
     // Without MSAA the pass renders straight into the swapchain texture,
     // so no separate color target exists.
     if (samples > 1) {
@@ -459,6 +492,7 @@ export class GpuRenderer {
     this.releaseScene()
     this.depth?.destroy()
     this.color?.destroy()
+    this.hiZ?.dispose()
     this.cameraBuffer.destroy()
   }
 }

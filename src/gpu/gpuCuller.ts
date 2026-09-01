@@ -6,11 +6,19 @@ import { writeFrustumPlanes } from './frustum'
 import { pixelsPerUnitAtUnitDepth, writeDepthPlane } from './screenSize'
 import { GpuScene, instanceCount } from './gpuScene'
 
-const CULL_UNIFORM_BYTES = 144 // six planes, a uvec4 of counts, a depth plane and the limits
+const CULL_UNIFORM_BYTES = 208 // planes, counts, depth plane, limits, view-projection
 const DEPTH_PLANE_FLOAT = 28 // byte 112
 const LIMITS_FLOAT = 32 // byte 128
+const VIEW_PROJ_FLOAT = 36 // byte 144
 const WORKGROUP_SIZE = 64
 const COUNTS_BYTES = 8 // one u32 per draw range
+
+/** The depth pyramid the occlusion test reads; see `HiZPyramid`. */
+export type CullPyramid = {
+    view: GPUTextureView;
+    width: number;
+    height: number;
+}
 
 /** What the cull pass should test this frame. */
 export type CullParams = {
@@ -20,6 +28,8 @@ export type CullParams = {
     minPixels: number;
     /** Viewport height in CSS pixels, so `minPixels` means what a viewer sees. */
     viewportHeight: number;
+    /** Test each sphere against this depth pyramid. Absent disables. */
+    pyramid?: CullPyramid;
 }
 
 /** Byte offset of a range's draw counter inside the counts buffer. */
@@ -37,7 +47,9 @@ export class GpuCuller {
 
   private readonly device: GPUDevice
   private readonly pipeline: GPUComputePipeline
-  private readonly bindGroup: GPUBindGroup
+  private bindGroup: GPUBindGroup
+  private readonly dummyPyramid: GPUTexture
+  private boundPyramid: GPUTextureView | undefined
   private readonly uniform: GPUBuffer
   private readonly uniformData = new Float32Array(CULL_UNIFORM_BYTES / 4)
   private readonly info: Uint32Array
@@ -82,14 +94,32 @@ export class GpuCuller {
       compute: { module: device.createShaderModule({ label: 'cull', code: cullShader }), entryPoint: 'main' }
     })
 
-    this.bindGroup = device.createBindGroup({
+    // The pyramid binding must always hold a texture; this stands in when the
+    // occlusion test is off, and the uniform flag keeps it from being read.
+    this.dummyPyramid = device.createTexture({
+      label: 'dummy pyramid',
+      size: [1, 1],
+      format: 'r32float',
+      usage: GPUTextureUsage.TEXTURE_BINDING
+    })
+    this.dummyView = this.dummyPyramid.createView()
+    this.source = source
+    this.bindGroup = this.createBindGroup(this.dummyView)
+  }
+
+  private readonly source: GPUBuffer
+  private readonly dummyView: GPUTextureView
+
+  private createBindGroup (pyramid: GPUTextureView): GPUBindGroup {
+    return this.device.createBindGroup({
       layout: this.pipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: { buffer: this.uniform } },
         { binding: 1, resource: { buffer: this.spheres } },
-        { binding: 2, resource: { buffer: source } },
+        { binding: 2, resource: { buffer: this.source } },
         { binding: 3, resource: { buffer: this.visible } },
-        { binding: 4, resource: { buffer: this.counts } }
+        { binding: 4, resource: { buffer: this.counts } },
+        { binding: 5, resource: pyramid }
       ]
     })
   }
@@ -108,9 +138,19 @@ export class GpuCuller {
     writeFrustumPlanes(viewProj, this.uniformData)
     writeDepthPlane(viewProj, this.uniformData, DEPTH_PLANE_FLOAT)
     this.info[2] = params.frustum ? 1 : 0
+    this.info[3] = params.pyramid ? 1 : 0
     this.uniformData[LIMITS_FLOAT] = pixelsPerUnitAtUnitDepth(viewProj, params.viewportHeight)
     this.uniformData[LIMITS_FLOAT + 1] = params.minPixels
+    this.uniformData[LIMITS_FLOAT + 2] = params.pyramid?.width ?? 1
+    this.uniformData[LIMITS_FLOAT + 3] = params.pyramid?.height ?? 1
+    this.uniformData.set(viewProj.elements, VIEW_PROJ_FLOAT)
     this.device.queue.writeBuffer(this.uniform, 0, this.uniformData)
+
+    // Rebound only when the pyramid texture changes, e.g. after a resize.
+    if (params.pyramid?.view !== this.boundPyramid) {
+      this.boundPyramid = params.pyramid?.view
+      this.bindGroup = this.createBindGroup(params.pyramid?.view ?? this.dummyView)
+    }
     this.device.queue.writeBuffer(this.counts, 0, this.zeros)
 
     const pass = encoder.beginComputePass({ label: 'cull' })
@@ -141,5 +181,6 @@ export class GpuCuller {
     for (const b of [this.spheres, this.visible, this.counts, this.readback, this.uniform]) {
       b.destroy()
     }
+    this.dummyPyramid.destroy()
   }
 }

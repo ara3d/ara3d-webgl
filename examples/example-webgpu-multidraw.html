@@ -67,6 +67,12 @@ async function run () {
     viewer.renderer.contributionThreshold = panel.contributionPixels()
   })
 
+  panel.occlusionToggle.disabled = !multiDraw
+  panel.occlusionToggle.checked = viewer.renderer.occlusionCulling
+  panel.occlusionToggle.addEventListener('change', () => {
+    viewer.renderer.occlusionCulling = panel.occlusionToggle.checked
+  })
+
   panel.backFaceToggle.checked = viewer.renderer.backFaceCulling
   panel.backFaceToggle.addEventListener('change', () => {
     viewer.renderer.backFaceCulling = panel.backFaceToggle.checked

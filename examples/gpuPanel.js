@@ -97,6 +97,8 @@ export function createGpuPanel () {
     '<div class="gpu-slider"><input type="range" id="gpu-contrib-px" ' +
     'min="0" max="1000" step="1" disabled>' +
     '<span id="gpu-contrib-value">-</span></div>' +
+    '<label class="gpu-toggle"><input type="checkbox" id="gpu-occlusion" disabled>' +
+    'GPU occlusion culling</label>' +
     '<label class="gpu-toggle"><input type="checkbox" id="gpu-backface" checked>' +
     'Back-face culling</label>' +
     '<label class="gpu-toggle"><input type="checkbox" id="gpu-sort">' +
@@ -126,6 +128,7 @@ export function createGpuPanel () {
   const toggle = cell('multi')
   const cullToggle = cell('cull')
   const contribToggle = cell('contrib')
+  const occlusionToggle = cell('occlusion')
   const backFaceToggle = cell('backface')
   const sortToggle = cell('sort')
   const contribSlider = cell('contrib-px')
@@ -140,6 +143,7 @@ export function createGpuPanel () {
     toggle,
     cullToggle,
     contribToggle,
+    occlusionToggle,
     backFaceToggle,
     sortToggle,
     contribSlider,
