@@ -58,6 +58,22 @@ export class GpuRenderer {
   useMultiDraw: boolean
 
   /**
+   * Rasterize only front faces. On by default: BIM meshes are mostly closed
+   * solids with consistent winding, and skipping back faces halves the
+   * rasterization work. Turn off for models with open or inverted meshes.
+   */
+  backFaceCulling = true
+
+  /**
+   * Keep the opaque draw commands roughly sorted front to back, so early
+   * depth testing rejects hidden fragments before they are shaded.
+   */
+  frontToBackSort = false
+
+  /** 4x multisampling. Turning it off trades edge quality for fill rate. */
+  msaa = true
+
+  /**
    * Optional GPU frustum culling. Off by default: it only pays off on models
    * where much of the scene is off screen, and it needs the multi-draw
    * extension, because the surviving draw count stays on the GPU.
