@@ -99,10 +99,8 @@ export function createGpuPanel () {
     '<span id="gpu-contrib-value">-</span></div>' +
     '<label class="gpu-toggle"><input type="checkbox" id="gpu-backface" checked>' +
     'Back-face culling</label>' +
-    '<label class="gpu-toggle"><input type="checkbox" id="gpu-sort">' +
-    'Sort front to back</label>' +
-    '<label class="gpu-toggle"><input type="checkbox" id="gpu-msaa" checked>' +
-    'MSAA 4x</label>' +
+    '<label class="gpu-toggle"><input type="checkbox" id="gpu-sort" checked>' +
+    'Sort draw order</label>' +
     '<div class="gpu-slider"><span class="gpu-slider-label">Move speed</span>' +
     `<input type="range" id="gpu-speed" min="${SPEED_MIN}" max="${SPEED_MAX}" step="0.5">` +
     '<span id="gpu-speed-value">-</span></div>' +
@@ -130,7 +128,6 @@ export function createGpuPanel () {
   const contribToggle = cell('contrib')
   const backFaceToggle = cell('backface')
   const sortToggle = cell('sort')
-  const msaaToggle = cell('msaa')
   const contribSlider = cell('contrib-px')
   const contribValue = cell('contrib-value')
   const speedSlider = cell('speed')
@@ -145,7 +142,6 @@ export function createGpuPanel () {
     contribToggle,
     backFaceToggle,
     sortToggle,
-    msaaToggle,
     contribSlider,
     /** Threshold in pixels currently shown by the slider. */
     contributionPixels () { return sliderToPixels(Number(contribSlider.value)) },
