@@ -1,4 +1,5 @@
 /// <reference path="./webgpuMultiDraw.d.ts" />
+import { GpuBytes } from './gpuBytes'
 
 /** Creates a GPU buffer holding a copy of `data`. */
 export function createBuffer (
@@ -25,3 +26,17 @@ export const createEmptyBuffer = (
 ): GPUBuffer => device.createBuffer({ label, size: align4(size), usage })
 
 export const align4 = (n: number) => (n + 3) & ~3
+
+/**
+ * The GPU buffer for `bytes`: the one it already holds, or a new one filled
+ * from memory. Either way the caller owns the result.
+ */
+export const toGpuBuffer = (
+  device: GPUDevice,
+  bytes: GpuBytes,
+  usage: GPUBufferUsageFlags,
+  label: string
+): GPUBuffer =>
+  bytes.kind === 'gpu'
+    ? bytes.gpuBuffer
+    : createBuffer(device, bytes.data, usage, label)

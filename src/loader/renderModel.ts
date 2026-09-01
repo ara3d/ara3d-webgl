@@ -34,12 +34,13 @@ export type RenderModelMeta = {
     flags: number;
 }
 
-export type RenderModel = {
-    /** Interleaved vertex data, `floatsPerVertex` floats per vertex. */
-    vertices: Float32Array;
+/**
+ * Everything except the vertex and index buffers. These tables are small even
+ * for a very large model, which is what lets the geometry go straight to the
+ * GPU while the scene is built from what is left.
+ */
+export type RenderModelTables = {
     floatsPerVertex: number;
-    /** Indices are local to their mesh slice; the slice supplies the base vertex. */
-    indices: Uint32Array;
     /** `MESH_SLICE_INTS` per mesh. */
     meshSlices: Int32Array;
     /** `INSTANCE_FLOAT_STRIDE` floats per instance; see `instanceMatrix`. */
@@ -53,8 +54,16 @@ export type RenderModel = {
     meta: RenderModelMeta;
 }
 
-export const meshCount = (m: RenderModel) => m.meshSlices.length / MESH_SLICE_INTS
-export const instanceCount = (m: RenderModel) => m.instanceInts.length / INSTANCE_FLOAT_STRIDE
+/** The tables plus the geometry, for a model read whole from memory. */
+export type RenderModel = RenderModelTables & {
+    /** Interleaved vertex data, `floatsPerVertex` floats per vertex. */
+    vertices: Float32Array;
+    /** Indices are local to their mesh slice; the slice supplies the base vertex. */
+    indices: Uint32Array;
+}
+
+export const meshCount = (m: RenderModelTables) => m.meshSlices.length / MESH_SLICE_INTS
+export const instanceCount = (m: RenderModelTables) => m.instanceInts.length / INSTANCE_FLOAT_STRIDE
 export const vertexCount = (m: RenderModel) => m.vertices.length / m.floatsPerVertex
 
 /** Field offsets within one instance record, in 32-bit words. */
@@ -63,24 +72,24 @@ const ENTITY_INDEX_WORD = 13
 const PACKED_COLOR_WORD = 14
 const FLAGS_WORD = 15
 
-export const instanceMeshIndex = (m: RenderModel, i: number) =>
+export const instanceMeshIndex = (m: RenderModelTables, i: number) =>
   m.instanceInts[i * INSTANCE_FLOAT_STRIDE + MESH_INDEX_WORD]
 
-export const instanceEntityIndex = (m: RenderModel, i: number) =>
+export const instanceEntityIndex = (m: RenderModelTables, i: number) =>
   m.instanceInts[i * INSTANCE_FLOAT_STRIDE + ENTITY_INDEX_WORD]
 
 /** Byte 1 of the last word holds the flags; byte 0 is unused. */
-export const instanceFlags = (m: RenderModel, i: number) =>
+export const instanceFlags = (m: RenderModelTables, i: number) =>
   (m.instanceInts[i * INSTANCE_FLOAT_STRIDE + FLAGS_WORD] >>> 8) & 0xff
 
-export const instanceHidden = (m: RenderModel, i: number) =>
+export const instanceHidden = (m: RenderModelTables, i: number) =>
   (instanceFlags(m, i) & INSTANCE_HIDDEN_FLAG) !== 0
 
 /** Packed RGBA, one byte per channel with red in the low byte. */
-export const instanceColor = (m: RenderModel, i: number) =>
+export const instanceColor = (m: RenderModelTables, i: number) =>
   m.instanceInts[i * INSTANCE_FLOAT_STRIDE + PACKED_COLOR_WORD] >>> 0
 
-export const instanceAlpha = (m: RenderModel, i: number) =>
+export const instanceAlpha = (m: RenderModelTables, i: number) =>
   (instanceColor(m, i) >>> 24) & 0xff
 
 /**
@@ -88,7 +97,7 @@ export const instanceAlpha = (m: RenderModel, i: number) =>
  * The file stores the three rows of a 3x4 matrix, with translation in the
  * fourth column of each row.
  */
-export function instanceMatrix (m: RenderModel, i: number, out: Float32Array, at = 0): Float32Array {
+export function instanceMatrix (m: RenderModelTables, i: number, out: Float32Array, at = 0): Float32Array {
   const f = m.instanceFloats
   const r = i * INSTANCE_FLOAT_STRIDE
   out[at + 0] = f[r + 0]; out[at + 1] = f[r + 4]; out[at + 2] = f[r + 8]; out[at + 3] = 0
@@ -113,23 +122,33 @@ export const RENDER_MODEL_BUFFERS = {
 export const isRenderModel = (bfast: BFast) =>
   Object.values(RENDER_MODEL_BUFFERS).every((n) => bfast.find(n) !== undefined)
 
+/** How the tables are found: by name in a BFAST, or supplied by a streaming reader. */
+export type BufferSource = (name: string) => Uint8Array
+
+/** Reads everything but the geometry, so a caller holding only the tables can use it. */
+export function readRenderModelTables (source: BufferSource): RenderModelTables {
+  const B = RENDER_MODEL_BUFFERS
+  const meta = readMeta(source(B.meta))
+  const instanceBytes = source(B.instances)
+
+  return {
+    floatsPerVertex: (meta.flags & VERTEX_COLORS_FLAG) !== 0 ? 6 : 3,
+    meshSlices: asInts(source(B.meshSlices), B.meshSlices),
+    instanceFloats: asFloats(instanceBytes, B.instances),
+    instanceInts: asInts(instanceBytes, B.instances),
+    meshBounds: asFloats(source(B.meshBounds), B.meshBounds),
+    instanceBounds: asFloats(source(B.instanceBounds), B.instanceBounds),
+    meta
+  }
+}
+
 /** Reads the render model buffers of a BFAST file into typed array views. */
 export function readRenderModel (bfast: BFast): RenderModel {
   const B = RENDER_MODEL_BUFFERS
-  const meta = readMeta(bfast.get(B.meta))
-  const floatsPerVertex = (meta.flags & VERTEX_COLORS_FLAG) !== 0 ? 6 : 3
-  const instanceBytes = bfast.get(B.instances)
-
   return {
+    ...readRenderModelTables((name) => bfast.get(name)),
     vertices: asFloats(bfast.get(B.vertices), B.vertices),
-    floatsPerVertex,
-    indices: asUints(bfast.get(B.indices), B.indices),
-    meshSlices: asInts(bfast.get(B.meshSlices), B.meshSlices),
-    instanceFloats: asFloats(instanceBytes, B.instances),
-    instanceInts: asInts(instanceBytes, B.instances),
-    meshBounds: asFloats(bfast.get(B.meshBounds), B.meshBounds),
-    instanceBounds: asFloats(bfast.get(B.instanceBounds), B.instanceBounds),
-    meta
+    indices: asUints(bfast.get(B.indices), B.indices)
   }
 }
 

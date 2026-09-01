@@ -1,7 +1,7 @@
 /// <reference path="./webgpuMultiDraw.d.ts" />
 import * as THREE from 'three'
 import { GpuContext } from './gpuDevice'
-import { createBuffer } from './gpuBuffers'
+import { createBuffer, toGpuBuffer } from './gpuBuffers'
 import { sceneShader } from './shaders/sceneShader'
 import { DRAW_COMMAND_WORDS, DrawRange, GpuScene, drawCount } from './gpuScene'
 import { GpuVertices } from './gpuVertices'
@@ -166,9 +166,11 @@ export class GpuRenderer {
     const device = this.ctx.device
     this.releaseScene()
 
+    // Streamed scenes arrive with their geometry already on the GPU; the
+    // renderer takes ownership either way and frees it with the scene.
     const vertexBuffers = scene.vertices.buffers.map((b, i) =>
-      createBuffer(device, b.data, GPUBufferUsage.VERTEX, `vertices${i}`))
-    const indices = createBuffer(device, scene.indices, GPUBufferUsage.INDEX, 'indices')
+      toGpuBuffer(device, b.bytes, GPUBufferUsage.VERTEX, `vertices${i}`))
+    const indices = toGpuBuffer(device, scene.indices, GPUBufferUsage.INDEX, 'indices')
     const instances = createBuffer(device, scene.instanceData, GPUBufferUsage.STORAGE, 'instances')
     const indirect = createBuffer(
       device,

@@ -104,8 +104,8 @@ async function profileWholeFile (url, device) {
   const scene = await stage(rows, 'build gpu scene', 0, () => buildGpuSceneFromModel(model))
 
   const uploads = [
-    ['vertices', scene.vertices.buffers[0].data, GPUBufferUsage.VERTEX],
-    ['indices', scene.indices, GPUBufferUsage.INDEX],
+    ['vertices', scene.vertices.buffers[0].bytes.data, GPUBufferUsage.VERTEX],
+    ['indices', scene.indices.data, GPUBufferUsage.INDEX],
     ['instances', scene.instanceData, GPUBufferUsage.STORAGE],
     ['spheres', scene.instanceSpheres, GPUBufferUsage.STORAGE],
     ['draw commands', scene.drawCommands, GPUBufferUsage.INDIRECT | GPUBufferUsage.STORAGE]

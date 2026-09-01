@@ -3,6 +3,7 @@ import { BimGeometry } from '../loader/bimGeometry'
 import { computeMeshSpheres } from './meshBounds'
 import { DRAW_COMMAND_WORDS, GpuScene, INSTANCE_FLOATS } from './gpuScene'
 import { columnVertices } from './gpuVertices'
+import { cpuBytes } from './gpuBytes'
 
 /** BOS stores vertex positions as integers multiplied by this. */
 const VERTEX_MULTIPLIER = 10_000
@@ -90,7 +91,7 @@ export function buildGpuScene (bg: BimGeometry): GpuScene {
 
   const scene: GpuScene = {
     vertices: columnVertices(bg.VertexX, bg.VertexY, bg.VertexZ, vertexScale),
-    indices: new Uint32Array(bg.IndexBuffer.buffer, bg.IndexBuffer.byteOffset, totalIndices),
+    indices: cpuBytes(new Uint32Array(bg.IndexBuffer.buffer, bg.IndexBuffer.byteOffset, totalIndices)),
     instanceData,
     instanceSpheres,
     instanceIds,

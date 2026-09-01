@@ -1,3 +1,4 @@
+import { GpuBytes } from './gpuBytes'
 import { GpuVertices } from './gpuVertices'
 
 /** Number of 32-bit words in one `DrawIndexedIndirect` command. */
@@ -21,7 +22,7 @@ export type GpuScene = {
     vertices: GpuVertices;
 
     /** Mesh-local indices; each draw command supplies its own base vertex. */
-    indices: Uint32Array;
+    indices: GpuBytes;
 
     /** `INSTANCE_FLOATS` per instance: column-major matrix then RGBA. */
     instanceData: Float32Array;

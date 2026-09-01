@@ -22,6 +22,7 @@ import {
 } from '../src/loader/renderModel'
 import { buildGpuSceneFromModel } from '../src/gpu/buildGpuSceneFromModel'
 import { DRAW_COMMAND_WORDS, GpuScene, drawCount } from '../src/gpu/gpuScene'
+import { byteLength } from '../src/gpu/gpuBytes'
 
 type StageTimings = Record<string, number>
 
@@ -136,8 +137,8 @@ function loadAndMeasure (path: string) {
   console.log(`bounds min: ${fmt3(scene.boundsMin)} max: ${fmt3(scene.boundsMax)}`)
 
   const upload =
-    scene.vertices.buffers.reduce((n, b) => n + b.data.byteLength, 0) +
-    scene.indices.byteLength + scene.instanceData.byteLength +
+    scene.vertices.buffers.reduce((n, b) => n + byteLength(b.bytes), 0) +
+    byteLength(scene.indices) + scene.instanceData.byteLength +
     scene.instanceSpheres.byteLength + scene.drawCommands.byteLength
   console.log(`bytes to upload: ${mb(upload)}`)
 

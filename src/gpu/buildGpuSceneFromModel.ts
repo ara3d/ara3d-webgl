@@ -1,23 +1,36 @@
 import { DRAW_COMMAND_WORDS, GpuScene, INSTANCE_FLOATS } from './gpuScene'
-import { interleavedVertices } from './gpuVertices'
+import { GpuBytes, cpuBytes } from './gpuBytes'
+import { GpuVertices, interleavedVertices } from './gpuVertices'
 import {
   MESH_SLICE_INTS,
   RenderModel,
+  RenderModelTables,
   instanceAlpha,
   instanceColor,
   instanceHidden,
   instanceMatrix,
   instanceMeshIndex,
-  instanceCount,
-  vertexCount
+  instanceCount
 } from '../loader/renderModel'
+
+/** Flattens a render model held whole in memory. */
+export const buildGpuSceneFromModel = (model: RenderModel): GpuScene =>
+  buildGpuSceneFromTables(
+    model,
+    interleavedVertices(cpuBytes(model.vertices), model.floatsPerVertex),
+    cpuBytes(model.indices))
 
 /**
  * Flattens a BFAST render model into indirect draw buffers.
  * One draw command per visible instance, matching the BOS path, so both model
- * formats feed the same renderer and culler.
+ * formats feed the same renderer and culler. The geometry is passed separately
+ * because a streamed model has already handed it to the GPU.
  */
-export function buildGpuSceneFromModel (model: RenderModel): GpuScene {
+export function buildGpuSceneFromTables (
+  model: RenderModelTables,
+  vertices: GpuVertices,
+  indices: GpuBytes
+): GpuScene {
   console.time('Building GPU scene')
 
   if (model.meta.primitiveSize !== 3) {
@@ -85,8 +98,8 @@ export function buildGpuSceneFromModel (model: RenderModel): GpuScene {
   const opaqueCount = countOpaque(instanceData, n)
 
   const scene: GpuScene = {
-    vertices: interleavedVertices(model.vertices, model.floatsPerVertex),
-    indices: model.indices,
+    vertices,
+    indices,
     instanceData,
     instanceSpheres,
     instanceIds,
@@ -99,7 +112,7 @@ export function buildGpuSceneFromModel (model: RenderModel): GpuScene {
 
   console.timeEnd('Building GPU scene')
   console.log(
-    `GPU scene: ${n} draws, ${triangleCount} triangles, ${vertexCount(model)} vertices`)
+    `GPU scene: ${n} draws, ${triangleCount} triangles, ${vertices.count} vertices`)
   return scene
 }
 
@@ -111,7 +124,7 @@ type Bounds = [number, number, number]
  * whole scene into the distance. Falls back to the instance bounds when the
  * file's are empty or missing.
  */
-function sceneBounds (model: RenderModel, min: Bounds, max: Bounds) {
+function sceneBounds (model: RenderModelTables, min: Bounds, max: Bounds) {
   const { boundsMin, boundsMax } = model.meta
   const usable =
     boundsMin.every(isFinite) && boundsMax.every(isFinite) &&
@@ -125,7 +138,7 @@ function sceneBounds (model: RenderModel, min: Bounds, max: Bounds) {
  * Instance slots in draw order: opaque instances first, then transparent ones,
  * so each group is a contiguous range of draw commands.
  */
-export function collectVisibleInstances (model: RenderModel): Int32Array {
+export function collectVisibleInstances (model: RenderModelTables): Int32Array {
   const count = instanceCount(model)
   const opaque: number[] = []
   const transparent: number[] = []

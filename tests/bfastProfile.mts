@@ -25,6 +25,7 @@ import {
 } from '../src/loader/renderModel'
 import { buildGpuSceneFromModel, collectVisibleInstances } from '../src/gpu/buildGpuSceneFromModel'
 import { INSTANCE_FLOATS } from '../src/gpu/gpuScene'
+import { byteLength } from '../src/gpu/gpuBytes'
 
 const mb = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 const ms = (t: number) => t.toFixed(1).padStart(9) + ' ms'
@@ -224,8 +225,8 @@ function profile (path: string, repeats: number) {
   console.log('\n--- what reaches the GPU ---')
   const scene = buildGpuSceneFromModel(model)
   const uploads: [string, number][] = [
-    ['vertices', scene.vertices.buffers.reduce((n, b) => n + b.data.byteLength, 0)],
-    ['indices', scene.indices.byteLength],
+    ['vertices', scene.vertices.buffers.reduce((n, b) => n + byteLength(b.bytes), 0)],
+    ['indices', byteLength(scene.indices)],
     ['instances', scene.instanceData.byteLength],
     ['spheres', scene.instanceSpheres.byteLength],
     ['draw commands', scene.drawCommands.byteLength]
