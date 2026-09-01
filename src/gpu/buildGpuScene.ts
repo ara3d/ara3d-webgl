@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { BimGeometry } from '../loader/bimGeometry'
 import { computeMeshSpheres } from './meshBounds'
-import { DRAW_COMMAND_WORDS, GpuScene, INSTANCE_FLOATS } from './gpuScene'
+import { DRAW_COMMAND_WORDS, GpuScene, INSTANCE_ALPHA_FLOAT, INSTANCE_FLOATS } from './gpuScene'
 import { columnVertices } from './gpuVertices'
 import { cpuBytes } from './gpuBytes'
 
@@ -52,11 +52,11 @@ export function buildGpuScene (bg: BimGeometry): GpuScene {
     matrix.compose(position, quaternion, scale)
 
     const base = slot * INSTANCE_FLOATS
-    instanceData.set(matrix.elements, base)
-    instanceData[base + 16] = bg.MaterialRed[mat] / 255
-    instanceData[base + 17] = bg.MaterialGreen[mat] / 255
-    instanceData[base + 18] = bg.MaterialBlue[mat] / 255
-    instanceData[base + 19] = bg.MaterialAlpha[mat] / 255
+    setInstanceRows(instanceData, base, matrix.elements)
+    instanceData[base + 12] = bg.MaterialRed[mat] / 255
+    instanceData[base + 13] = bg.MaterialGreen[mat] / 255
+    instanceData[base + 14] = bg.MaterialBlue[mat] / 255
+    instanceData[base + 15] = bg.MaterialAlpha[mat] / 255
 
     center
       .set(meshSpheres[mesh * 4], meshSpheres[mesh * 4 + 1], meshSpheres[mesh * 4 + 2])
@@ -110,6 +110,16 @@ export function buildGpuScene (bg: BimGeometry): GpuScene {
   return scene
 }
 
+/** Writes a column-major 4x4 as the three rows of a 3x4, the instance record layout. */
+function setInstanceRows (out: Float32Array, at: number, e: number[] | Float32Array) {
+  for (let row = 0; row < 3; row++) {
+    out[at + row * 4 + 0] = e[row]
+    out[at + row * 4 + 1] = e[4 + row]
+    out[at + row * 4 + 2] = e[8 + row]
+    out[at + row * 4 + 3] = e[12 + row]
+  }
+}
+
 const maxAbs = (v: THREE.Vector3) =>
   Math.max(Math.abs(v.x), Math.abs(v.y), Math.abs(v.z))
 
@@ -141,6 +151,6 @@ function collectVisibleInstances (bg: BimGeometry): Int32Array {
 
 const countOpaque = (instanceData: Float32Array, n: number) => {
   let count = 0
-  while (count < n && instanceData[count * INSTANCE_FLOATS + 19] >= 1) count++
+  while (count < n && instanceData[count * INSTANCE_FLOATS + INSTANCE_ALPHA_FLOAT] >= 1) count++
   return count
 }

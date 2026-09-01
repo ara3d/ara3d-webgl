@@ -97,6 +97,16 @@ export const instanceAlpha = (m: RenderModelTables, i: number) =>
  * The file stores the three rows of a 3x4 matrix, with translation in the
  * fourth column of each row.
  */
+/**
+ * Copies the instance transform into `out` exactly as the file stores it:
+ * the three rows of a 3x4 matrix, translation in the fourth column of each row.
+ */
+export function instanceRows (m: RenderModelTables, i: number, out: Float32Array, at = 0): Float32Array {
+  const r = i * INSTANCE_FLOAT_STRIDE
+  out.set(m.instanceFloats.subarray(r, r + 12), at)
+  return out
+}
+
 export function instanceMatrix (m: RenderModelTables, i: number, out: Float32Array, at = 0): Float32Array {
   const f = m.instanceFloats
   const r = i * INSTANCE_FLOAT_STRIDE

@@ -17,9 +17,12 @@ struct Camera {
   params   : vec4<f32>,   // x: vertex scale
 };
 
+// The three rows of a 3x4 transform, translation in each row's .w — the
+// layout the model file uses. As a WGSL mat3x4 the rows land in the columns,
+// so vec4 * rows yields the three row dot products: the world position.
 struct Instance {
-  transform : mat4x4<f32>,
-  color     : vec4<f32>,
+  rows  : mat3x4<f32>,
+  color : vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> camera : Camera;
@@ -40,11 +43,11 @@ fn vs(
 ) -> VsOut {
   let inst = instances[id];
   let local = vec3<f32>(f32(x), f32(y), f32(z)) * camera.params.x;
-  let world = inst.transform * vec4<f32>(local, 1.0);
+  let world = vec4<f32>(local, 1.0) * inst.rows;
 
   var out : VsOut;
-  out.clip = camera.viewProj * world;
-  out.world = world.xyz;
+  out.clip = camera.viewProj * vec4<f32>(world, 1.0);
+  out.world = world;
   out.color = inst.color;
   return out;
 }

@@ -1,4 +1,4 @@
-import { DRAW_COMMAND_WORDS, GpuScene, INSTANCE_FLOATS } from './gpuScene'
+import { DRAW_COMMAND_WORDS, GpuScene, INSTANCE_ALPHA_FLOAT, INSTANCE_FLOATS } from './gpuScene'
 import { GpuBytes, cpuBytes } from './gpuBytes'
 import { GpuVertices, interleavedVertices } from './gpuVertices'
 import {
@@ -8,7 +8,7 @@ import {
   instanceAlpha,
   instanceColor,
   instanceHidden,
-  instanceMatrix,
+  instanceRows,
   instanceMeshIndex,
   instanceCount
 } from '../loader/renderModel'
@@ -53,13 +53,13 @@ export function buildGpuSceneFromTables (
   for (let slot = 0; slot < n; slot++) {
     const i = visible[slot]
     const base = slot * INSTANCE_FLOATS
-    instanceMatrix(model, i, instanceData, base)
+    instanceRows(model, i, instanceData, base)
 
     const color = instanceColor(model, i)
-    instanceData[base + 16] = (color & 0xff) / 255
-    instanceData[base + 17] = ((color >>> 8) & 0xff) / 255
-    instanceData[base + 18] = ((color >>> 16) & 0xff) / 255
-    instanceData[base + 19] = ((color >>> 24) & 0xff) / 255
+    instanceData[base + 12] = (color & 0xff) / 255
+    instanceData[base + 13] = ((color >>> 8) & 0xff) / 255
+    instanceData[base + 14] = ((color >>> 16) & 0xff) / 255
+    instanceData[base + 15] = ((color >>> 24) & 0xff) / 255
 
     // The file already carries a world space box per instance, so the sphere
     // needs no transform of the mesh bounds.
@@ -156,6 +156,6 @@ export function collectVisibleInstances (model: RenderModelTables): Int32Array {
 
 const countOpaque = (instanceData: Float32Array, n: number) => {
   let count = 0
-  while (count < n && instanceData[count * INSTANCE_FLOATS + 19] >= 1) count++
+  while (count < n && instanceData[count * INSTANCE_FLOATS + INSTANCE_ALPHA_FLOAT] >= 1) count++
   return count
 }

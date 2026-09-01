@@ -4,8 +4,11 @@ import { GpuVertices } from './gpuVertices'
 /** Number of 32-bit words in one `DrawIndexedIndirect` command. */
 export const DRAW_COMMAND_WORDS = 5
 
-/** Number of floats per instance record: a 4x4 matrix followed by an RGBA color. */
-export const INSTANCE_FLOATS = 20
+/** Number of floats per instance record: three rows of a 3x4 matrix, then RGBA. */
+export const INSTANCE_FLOATS = 16
+
+/** Float offset of the alpha channel within an instance record. */
+export const INSTANCE_ALPHA_FLOAT = 15
 
 /** A contiguous run of draw commands rendered with one pipeline. */
 export type DrawRange = {
@@ -24,7 +27,7 @@ export type GpuScene = {
     /** Mesh-local indices; each draw command supplies its own base vertex. */
     indices: GpuBytes;
 
-    /** `INSTANCE_FLOATS` per instance: column-major matrix then RGBA. */
+    /** `INSTANCE_FLOATS` per instance: three 3x4 matrix rows then RGBA. */
     instanceData: Float32Array;
 
     /** World space bounding sphere per instance: center xyz then radius. */

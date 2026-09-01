@@ -18,7 +18,7 @@ import {
   instanceAlpha,
   instanceCount,
   instanceHidden,
-  instanceMatrix,
+  instanceRows,
   instanceMeshIndex,
   readRenderModel,
   vertexCount
@@ -123,7 +123,7 @@ function benchInstanceParts (model: RenderModel, visible: Int32Array, repeats: n
 
   bench('  transforms only', repeats, () => {
     for (let slot = 0; slot < n; slot++) {
-      instanceMatrix(model, visible[slot], instanceData, slot * INSTANCE_FLOATS)
+      instanceRows(model, visible[slot], instanceData, slot * INSTANCE_FLOATS)
     }
   })
 
@@ -132,10 +132,10 @@ function benchInstanceParts (model: RenderModel, visible: Int32Array, repeats: n
     for (let slot = 0; slot < n; slot++) {
       const color = ints[visible[slot] * INSTANCE_FLOAT_STRIDE + 14]
       const base = slot * INSTANCE_FLOATS
-      instanceData[base + 16] = (color & 0xff) / 255
-      instanceData[base + 17] = ((color >>> 8) & 0xff) / 255
-      instanceData[base + 18] = ((color >>> 16) & 0xff) / 255
-      instanceData[base + 19] = ((color >>> 24) & 0xff) / 255
+      instanceData[base + 12] = (color & 0xff) / 255
+      instanceData[base + 13] = ((color >>> 8) & 0xff) / 255
+      instanceData[base + 14] = ((color >>> 16) & 0xff) / 255
+      instanceData[base + 15] = ((color >>> 24) & 0xff) / 255
     }
   })
 
