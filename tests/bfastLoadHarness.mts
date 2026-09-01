@@ -101,10 +101,11 @@ function loadAndMeasure (path: string) {
   const timings: StageTimings = {}
 
   const file = timed(timings, 'read file', () => readFileSync(path))
-  const buffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer
-  console.log(`file size: ${mb(buffer.byteLength)}`)
+  console.log(`file size: ${mb(file.byteLength)}`)
 
-  const bfast = timed(timings, 'parse bfast', () => readBFast(buffer))
+  // Parsed in place: readBFast takes the offset rather than a copied slice.
+  const bfast = timed(timings, 'parse bfast',
+    () => readBFast(file.buffer as ArrayBuffer, file.byteOffset))
   console.log('buffers: ' + bfast.buffers.map((b) => `${b.name} (${mb(b.bytes.byteLength)})`).join(', '))
   if (!isRenderModel(bfast)) {
     check(false, 'the file is not a render model')

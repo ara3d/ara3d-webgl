@@ -21,6 +21,7 @@ export default defineConfig({
                 exampleBosSelection: resolve(__dirname, 'examples/example-bos-selection.html'),
                 exampleBos: resolve(__dirname, 'examples/example-bos.html'),
                 exampleWebGpuMultiDraw: resolve(__dirname, 'examples/example-webgpu-multidraw.html'),
+                profileBfast: resolve(__dirname, 'examples/profile-bfast.html'),
             },
         },
     },

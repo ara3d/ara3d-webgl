@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFAST load profile</title>
+  <style>
+    body { background: #16181c; color: #d8dde5; font: 13px/1.5 ui-monospace, Consolas, monospace; margin: 0; padding: 20px; }
+    h1 { font-size: 15px; color: #e8b339; margin: 0 0 4px; }
+    p.note { color: #97a1b0; margin: 0 0 16px; max-width: 70ch; }
+    table { border-collapse: collapse; margin: 0 0 22px; }
+    caption { text-align: left; color: #e8b339; padding: 10px 0 6px; font-weight: bold; }
+    th, td { padding: 3px 14px 3px 0; text-align: right; white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; }
+    th { color: #97a1b0; font-weight: normal; border-bottom: 1px solid #2c3039; }
+    tr.total td { border-top: 1px solid #2c3039; color: #e8b339; }
+    .bar { display: inline-block; height: 9px; background: #4a7fd4; vertical-align: middle; }
+    #err { color: #ff6b6b; white-space: pre-wrap; }
+    input { background: #22252b; color: #d8dde5; border: 1px solid #2c3039; padding: 4px 6px; width: 44ch; }
+    button { background: #2c3039; color: #d8dde5; border: 1px solid #3a3f4b; padding: 4px 12px; cursor: pointer; }
+  </style>
+</head>
+<body>
+<h1>BFAST load profile</h1>
+<p class="note">
+  Measures where the time goes when loading a .bfast render model, and compares
+  two ways of getting the bytes to the GPU: reading the whole file into one
+  ArrayBuffer, and streaming each buffer straight into its GPU buffer with a
+  range request. Pass <code>?model=&lt;url&gt;</code> to profile a different file.
+</p>
+<p>
+  <input id="url" /> <input id="gzipUrl" /> <button id="run">Run</button>
+</p>
+<div id="err"></div>
+<div id="out"></div>
+
+<script type="module">
+import {
+  BFAST_HEADER_PROBE, readBFast, readBFastHeader
+} from '../src/loader/bfast'
+import { readRenderModel, isRenderModel } from '../src/loader/renderModel'
+import { buildGpuSceneFromModel } from '../src/gpu/buildGpuSceneFromModel'
+import { requestGpuContext, isWebGpuAvailable } from '../src/gpu/gpuDevice'
+
+const DEFAULT = 'http://localhost:8099/all.bfast'
+// The same file behind a server that sends it with Content-Encoding: gzip.
+const DEFAULT_GZIP = 'http://localhost:8100/all.bfast'
+const out = document.getElementById('err')
+const results = document.getElementById('out')
+const urlInput = document.getElementById('url')
+const gzipInput = document.getElementById('gzipUrl')
+const params = new URLSearchParams(location.search)
+urlInput.value = params.get('model') ?? DEFAULT
+gzipInput.value = params.get('gzip') ?? DEFAULT_GZIP
+
+const MB = (b) => (b / 1048576).toFixed(1)
+const now = () => performance.now()
+
+/** One measured stage. */
+const stage = async (rows, name, bytes, f) => {
+  const start = now()
+  const value = await f()
+  rows.push({ name, ms: now() - start, bytes })
+  return value
+}
+
+function table (title, rows) {
+  const total = rows.reduce((a, r) => a + r.ms, 0)
+  const max = Math.max(...rows.map((r) => r.ms))
+  const tr = (r) => `<tr>
+    <td>${r.name}</td>
+    <td>${r.bytes ? MB(r.bytes) + ' MB' : ''}</td>
+    <td>${r.ms.toFixed(0)} ms</td>
+    <td>${r.bytes ? (r.bytes / 1048576 / (r.ms / 1000)).toFixed(0) + ' MB/s' : ''}</td>
+    <td>${(r.ms / total * 100).toFixed(0)}%</td>
+    <td><span class="bar" style="width:${(r.ms / max * 160).toFixed(0)}px"></span></td>
+  </tr>`
+  results.insertAdjacentHTML('beforeend', `<table>
+    <caption>${title}</caption>
+    <tr><th>stage</th><th>bytes</th><th>time</th><th>rate</th><th>share</th><th></th></tr>
+    ${rows.map(tr).join('')}
+    <tr class="total"><td>total</td><td></td><td>${total.toFixed(0)} ms</td><td></td><td></td><td></td></tr>
+  </table>`)
+  return total
+}
+
+const note = (html) => results.insertAdjacentHTML('beforeend', `<p class="note">${html}</p>`)
+
+/** Rounded up to the 4 byte multiple writeBuffer and createBuffer need. */
+const align4 = (n) => (n + 3) & ~3
+
+/** Path A: the shipped loader. Whole file into one ArrayBuffer, then upload. */
+async function profileWholeFile (url, device) {
+  const rows = []
+  const buffer = await stage(rows, 'fetch to ArrayBuffer', 0, async () => {
+    const r = await fetch(url)
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText} for ${url}`)
+    return r.arrayBuffer()
+  })
+  rows[0].bytes = buffer.byteLength
+
+  const bfast = await stage(rows, 'parse header', 0, () => readBFast(buffer))
+  if (!isRenderModel(bfast)) throw new Error('not a render model: ' + bfast.names.join(', '))
+  const model = await stage(rows, 'decode render model', 0, () => readRenderModel(bfast))
+  const scene = await stage(rows, 'build gpu scene', 0, () => buildGpuSceneFromModel(model))
+
+  const uploads = [
+    ['vertices', scene.vertices.buffers[0].data, GPUBufferUsage.VERTEX],
+    ['indices', scene.indices, GPUBufferUsage.INDEX],
+    ['instances', scene.instanceData, GPUBufferUsage.STORAGE],
+    ['spheres', scene.instanceSpheres, GPUBufferUsage.STORAGE],
+    ['draw commands', scene.drawCommands, GPUBufferUsage.INDIRECT | GPUBufferUsage.STORAGE]
+  ]
+  const created = []
+  for (const [name, data, usage] of uploads) {
+    await stage(rows, 'upload ' + name, data.byteLength, async () => {
+      const gpu = device.createBuffer({
+        size: align4(data.byteLength), usage: usage | GPUBufferUsage.COPY_DST })
+      created.push(gpu)
+      device.queue.writeBuffer(gpu, 0, data.buffer, data.byteOffset, data.byteLength)
+      await device.queue.onSubmittedWorkDone()
+    })
+  }
+
+  const stats = {
+    draws: scene.drawCommands.length / 5,
+    triangles: scene.triangleCount,
+    bytes: buffer.byteLength
+  }
+  for (const b of created) b.destroy()
+  return { rows, stats }
+}
+
+/**
+ * Path B: read the head of the file, then pull each large buffer with its own
+ * range request and write it to the GPU as the chunks arrive, so the bytes are
+ * never held in a JavaScript array.
+ */
+async function profileStreamed (url, device) {
+  const rows = []
+  const head = await stage(rows, 'fetch header (range)', BFAST_HEADER_PROBE, async () => {
+    const r = await fetch(url, { headers: { Range: `bytes=0-${BFAST_HEADER_PROBE - 1}` } })
+    if (r.status !== 206) throw new Error(`server ignored the range request (${r.status})`)
+    return r.arrayBuffer()
+  })
+
+  const ranges = await stage(rows, 'parse header', 0, () => readBFastHeader(head))
+  const geometry = new Set(['VertexData', 'IndexData'])
+
+  const created = []
+  for (const r of ranges.filter((r) => geometry.has(r.name))) {
+    const size = r.end - r.begin
+    await stage(rows, `stream ${r.name}`, size, async () => {
+      const gpu = device.createBuffer({
+        size: align4(size),
+        usage: (r.name === 'IndexData' ? GPUBufferUsage.INDEX : GPUBufferUsage.VERTEX) |
+          GPUBufferUsage.COPY_DST
+      })
+      created.push(gpu)
+      await streamInto(device, gpu, url, r.begin, r.end)
+      await device.queue.onSubmittedWorkDone()
+    })
+  }
+
+  // The rest is small, and the scene build needs it in memory anyway.
+  const rest = ranges.filter((r) => !geometry.has(r.name))
+  const begin = Math.min(...rest.map((r) => r.begin))
+  const end = Math.max(...rest.map((r) => r.end))
+  await stage(rows, 'fetch instance tables (range)', end - begin, async () => {
+    const r = await fetch(url, { headers: { Range: `bytes=${begin}-${end - 1}` } })
+    return r.arrayBuffer()
+  })
+
+  for (const b of created) b.destroy()
+  return { rows }
+}
+
+/** Writes a byte range of `url` into `gpu` as it arrives. */
+async function streamInto (device, gpu, url, begin, end) {
+  const resp = await fetch(url, { headers: { Range: `bytes=${begin}-${end - 1}` } })
+  if (resp.status !== 206) throw new Error(`server ignored the range request (${resp.status})`)
+  const reader = resp.body.getReader()
+  let at = 0
+  // writeBuffer takes whole 4 byte words, so a partial word waits for the next chunk.
+  let carry = new Uint8Array(0)
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    let data = value
+    if (carry.length) {
+      const joined = new Uint8Array(carry.length + data.length)
+      joined.set(carry); joined.set(data, carry.length)
+      data = joined
+    }
+    const whole = data.length & ~3
+    carry = data.subarray(whole)
+    if (whole) {
+      device.queue.writeBuffer(gpu, at, data.buffer, data.byteOffset, whole)
+      at += whole
+    }
+  }
+  if (carry.length) {
+    const padded = new Uint8Array(4)
+    padded.set(carry)
+    device.queue.writeBuffer(gpu, at, padded)
+    at += carry.length
+  }
+  if (at !== end - begin) throw new Error(`streamed ${at} bytes, expected ${end - begin}`)
+}
+
+
+/**
+ * Path C: one request for a gzipped file, with the decompressed bytes routed
+ * into their GPU buffers as they arrive. The browser inflates the body, so the
+ * transfer is small and the geometry still never lands in a JavaScript array.
+ */
+async function profileGzipStreamed (url, device) {
+  const rows = []
+  const start = now()
+
+  const resp = await fetch(url)
+  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText} for ${url}`)
+  // Content-Encoding is not CORS-safelisted, so a cross-origin response will not
+  // reveal it. Content-Length is, so compare it against the decoded size instead.
+  const wireBytes = Number(resp.headers.get('content-length')) || 0
+  rows.push({ name: 'response headers', ms: now() - start, bytes: 0 })
+
+  const reader = resp.body.getReader()
+  const geometry = new Set(['VertexData', 'IndexData'])
+
+  let ranges = null
+  let targets = null
+  const created = []
+  const rest = new Map()
+  let filePos = 0
+  let prefix = []
+  let prefixBytes = 0
+  let decoded = 0
+
+  const t1 = now()
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    decoded += value.length
+
+    if (!ranges) {
+      // Hold the head of the stream until the whole header is available.
+      prefix.push(value)
+      prefixBytes += value.length
+      if (prefixBytes < BFAST_HEADER_PROBE) continue
+      const head = new Uint8Array(prefixBytes)
+      let at = 0
+      for (const p of prefix) { head.set(p, at); at += p.length }
+      ranges = readBFastHeader(head.buffer, head.byteOffset)
+      targets = ranges.map((r) => {
+        const size = r.end - r.begin
+        if (geometry.has(r.name)) {
+          const gpu = device.createBuffer({
+            size: align4(size),
+            usage: (r.name === 'IndexData' ? GPUBufferUsage.INDEX : GPUBufferUsage.VERTEX) |
+              GPUBufferUsage.COPY_DST
+          })
+          created.push(gpu)
+          return { range: r, gpu, carry: new Uint8Array(0), at: 0 }
+        }
+        const bytes = new Uint8Array(size)
+        rest.set(r.name, bytes)
+        return { range: r, bytes }
+      })
+      route(device, targets, head, 0)
+      filePos = prefixBytes
+      prefix = null
+      continue
+    }
+
+    route(device, targets, value, filePos)
+    filePos += value.length
+  }
+  flushCarries(device, targets)
+  rows.push({ name: 'stream and route to GPU', ms: now() - t1, bytes: decoded })
+
+  const t2 = now()
+  await device.queue.onSubmittedWorkDone()
+  rows.push({ name: 'wait for GPU', ms: now() - t2, bytes: 0 })
+
+  for (const b of created) b.destroy()
+  return {
+    rows,
+    note: `Server sent ${MB(wireBytes)} MB on the wire for ${MB(decoded)} MB of data ` +
+      `(${(decoded / wireBytes).toFixed(1)}x). ` +
+      (decoded > wireBytes * 1.05
+        ? 'Compression is active.'
+        : 'No compression: is the .gz present and --gzip enabled?')
+  }
+}
+
+/** Copies the part of `chunk` belonging to each target into that target. */
+function route (device, targets, chunk, chunkStart) {
+  const chunkEnd = chunkStart + chunk.length
+  for (const t of targets) {
+    const from = Math.max(chunkStart, t.range.begin)
+    const to = Math.min(chunkEnd, t.range.end)
+    if (to <= from) continue
+    const piece = chunk.subarray(from - chunkStart, to - chunkStart)
+
+    if (!t.gpu) { t.bytes.set(piece, from - t.range.begin); continue }
+
+    // writeBuffer takes whole 4 byte words, so a partial word waits for the next chunk.
+    let data = piece
+    if (t.carry.length) {
+      const joined = new Uint8Array(t.carry.length + piece.length)
+      joined.set(t.carry); joined.set(piece, t.carry.length)
+      data = joined
+    }
+    const whole = data.length & ~3
+    t.carry = data.subarray(whole)
+    if (whole) {
+      device.queue.writeBuffer(t.gpu, t.at, data.buffer, data.byteOffset, whole)
+      t.at += whole
+    }
+  }
+}
+
+const flushCarries = (device, targets) => {
+  for (const t of targets ?? []) {
+    if (!t.gpu || !t.carry.length) continue
+    const padded = new Uint8Array(4)
+    padded.set(t.carry)
+    device.queue.writeBuffer(t.gpu, t.at, padded)
+    t.at += t.carry.length
+    t.carry = new Uint8Array(0)
+  }
+}
+
+async function run () {
+  results.innerHTML = ''
+  out.textContent = ''
+  const url = urlInput.value.trim()
+
+  if (!isWebGpuAvailable()) { out.textContent = 'WebGPU is not available in this browser.'; return }
+  const { device } = await requestGpuContext()
+
+  const whole = await profileWholeFile(url, device)
+  const totalA = table('A. whole file into one ArrayBuffer (what the loader does today)', whole.rows)
+  results.insertAdjacentHTML('beforeend',
+    `<p class="note">${whole.stats.draws.toLocaleString()} draw commands, ` +
+    `${whole.stats.triangles.toLocaleString()} triangles, ` +
+    `${MB(whole.stats.bytes)} MB file.</p>`)
+
+  const streamed = await profileStreamed(url, device)
+  const totalB = table('B. range requests streamed straight into GPU buffers', streamed.rows)
+  note('Geometry never lands in a JavaScript array, and the upload overlaps the download. ' +
+    `<b>${(totalA / totalB).toFixed(1)}x</b> faster than A here.`)
+
+  const gzipUrl = gzipInput.value.trim()
+  if (gzipUrl) {
+    const gz = await profileGzipStreamed(gzipUrl, device)
+    const totalC = table('C. one gzipped request, decompressed bytes routed into GPU buffers', gz.rows)
+    note(`${gz.note} <b>${(totalA / totalC).toFixed(1)}x</b> faster than A, ` +
+      `<b>${(totalB / totalC).toFixed(1)}x</b> faster than B here.`)
+  }
+}
+
+document.getElementById('run').addEventListener('click',
+  () => run().catch((e) => { out.textContent = String(e.stack ?? e) }))
+run().catch((e) => { out.textContent = String(e.stack ?? e) })
+</script>
+</body>
+</html>

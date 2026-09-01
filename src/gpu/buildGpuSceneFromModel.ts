@@ -125,7 +125,7 @@ function sceneBounds (model: RenderModel, min: Bounds, max: Bounds) {
  * Instance slots in draw order: opaque instances first, then transparent ones,
  * so each group is a contiguous range of draw commands.
  */
-function collectVisibleInstances (model: RenderModel): Int32Array {
+export function collectVisibleInstances (model: RenderModel): Int32Array {
   const count = instanceCount(model)
   const opaque: number[] = []
   const transparent: number[] = []
