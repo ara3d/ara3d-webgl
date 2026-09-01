@@ -7,6 +7,7 @@ import { buildGpuScene } from './buildGpuScene'
 import { buildGpuSceneFromModel } from './buildGpuSceneFromModel'
 import { GpuScene } from './gpuScene'
 import { streamChunks, streamGpuScene } from './streamGpuScene'
+import { canStreamInWorker, workerChunks } from '../loader/workerStream'
 
 /** A loaded model: the buffers the GPU renderer needs, plus the BOS tables when the file has them. */
 export type GpuModel = {
@@ -41,22 +42,30 @@ export class GpuModelLoader {
   }
 
   async load (source: string): Promise<GpuModel> {
+    const device = this.options.device
+    // A worker drains the connection at full speed; a main thread read loop
+    // is scheduled with the rest of the page and can be an order slower.
+    if (device && canStreamInWorker()) {
+      return await loadFromChunks(device, workerChunks(source))
+    }
+
     const response = await fetch(source)
     if (!response.ok) {
       throw new Error(`Failed to fetch model from ${source}: ${response.status} ${response.statusText}`)
     }
-
-    const device = this.options.device
     if (device && response.body) {
-      return await loadFromStream(device, response.body.getReader())
+      return await loadFromChunks(device, streamChunks(response.body.getReader()))
     }
     return this.loadFromArrayBuffer(await response.arrayBuffer())
   }
 
   async loadFromFile (file: Blob): Promise<GpuModel> {
     const device = this.options.device
+    if (device && canStreamInWorker()) {
+      return await loadFromChunks(device, workerChunks(file))
+    }
     if (device && typeof file.stream === 'function') {
-      return await loadFromStream(device, file.stream().getReader())
+      return await loadFromChunks(device, streamChunks(file.stream().getReader()))
     }
     return this.loadFromArrayBuffer(await file.arrayBuffer())
   }
@@ -73,38 +82,56 @@ export class GpuModelLoader {
  * rest into GPU buffers or gathers it for the zip reader. Either way the body is
  * read once.
  */
-async function loadFromStream (
+async function loadFromChunks (
   device: GPUDevice,
-  reader: ReadableStreamDefaultReader<Uint8Array>
+  chunks: AsyncIterable<Uint8Array>
 ): Promise<GpuModel> {
-  const { chunks, bytes, done } = await readAtLeast(reader, BFAST_HEADER_PROBE)
-  const head = concat(chunks, bytes)
+  const it = chunks[Symbol.asyncIterator]()
+  const head_ = await readAtLeast(it, BFAST_HEADER_PROBE)
+  const head = concat(head_.chunks, head_.bytes)
 
   if (isBFast(head.buffer, head.byteOffset)) {
-    return { scene: await streamGpuScene(device, streamChunks(reader, [head])) }
+    return { scene: await streamGpuScene(device, resume(it, [head])) }
   }
 
-  const rest = done ? [] : (await readAll(reader)).chunks
-  const whole = concat([head, ...rest], bytes + total(rest))
+  const rest = head_.done ? [] : (await readAll(it)).chunks
+  const whole = concat([head, ...rest], head_.bytes + total(rest))
   return await loadBosModel(whole.buffer as ArrayBuffer)
 }
 
+/** Yields a peeked prefix, then the rest of the iterator; closes it when abandoned. */
+async function * resume (
+  it: AsyncIterator<Uint8Array>,
+  prefix: Uint8Array[]
+): AsyncIterable<Uint8Array> {
+  try {
+    for (const p of prefix) yield p
+    for (;;) {
+      const { done, value } = await it.next()
+      if (done) return
+      if (value) yield value
+    }
+  } finally {
+    await it.return?.()
+  }
+}
+
 /** Reads until `wanted` bytes are available or the stream ends. */
-async function readAtLeast (reader: ReadableStreamDefaultReader<Uint8Array>, wanted: number) {
+async function readAtLeast (it: AsyncIterator<Uint8Array>, wanted: number) {
   const chunks: Uint8Array[] = []
   let bytes = 0
   while (bytes < wanted) {
-    const { done, value } = await reader.read()
+    const { done, value } = await it.next()
     if (done) return { chunks, bytes, done: true }
     if (value) { chunks.push(value); bytes += value.length }
   }
   return { chunks, bytes, done: false }
 }
 
-async function readAll (reader: ReadableStreamDefaultReader<Uint8Array>) {
+async function readAll (it: AsyncIterator<Uint8Array>) {
   const chunks: Uint8Array[] = []
   for (;;) {
-    const { done, value } = await reader.read()
+    const { done, value } = await it.next()
     if (done) return { chunks }
     if (value) chunks.push(value)
   }
