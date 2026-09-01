@@ -1,6 +1,6 @@
 import "./modulepreload-polyfill.c7c6310f.js";
 import { q as isRenderModel, b as BFAST_HEADER_PROBE, r as readBFastHeader, d as readBFast, t as readRenderModel } from "./renderModel.76ea7852.js";
-import { h as isWebGpuAvailable, r as requestGpuContext, d as buildGpuSceneFromModel } from "./buildGpuSceneFromModel.4980941e.js";
+import { j as isWebGpuAvailable, r as requestGpuContext, d as buildGpuSceneFromModel } from "./buildGpuSceneFromModel.e01cea5b.js";
 const DEFAULT = "http://localhost:8099/all.bfast";
 const DEFAULT_GZIP = "http://localhost:8100/all.bfast";
 const out = document.getElementById("err");
@@ -291,4 +291,4 @@ document.getElementById("run").addEventListener(
 run().catch((e) => {
   out.textContent = String(e.stack ?? e);
 });
-//# sourceMappingURL=profileBfast.636a3717.js.map
+//# sourceMappingURL=profileBfast.91ed05af.js.map

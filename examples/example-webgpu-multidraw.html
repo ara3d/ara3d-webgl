@@ -11,11 +11,6 @@ import { createGpuPanel, showStats, fmt } from './gpuPanel.js'
 
 const DEFAULT_MODEL = 'Snowdon Towers Sample Architectural.bos'
 
-const CONTROLS_HELP =
-  'Left drag orbits, middle drag pans, right drag looks. Wheel zooms, ' +
-  'W/A/S/D or arrows fly, Q/E go down/up, +/- change speed, ' +
-  'F frames the model, Home resets, P toggles orthographic.'
-
 // Pass ?model=stadium.bos to load one of the other bundled samples, or a
 // URL to a .bfast render model.
 const requested = new URLSearchParams(location.search).get('model') ?? DEFAULT_MODEL
@@ -42,9 +37,7 @@ async function run () {
   panel.set('adapter', viewer.context.adapterInfo)
   panel.set('status', multiDraw ? 'supported' : 'not available')
   panel.setNote(
-    multiDraw
-      ? 'One call per pass draws the whole model. Untick to compare against one drawIndexedIndirect per instance.'
-      : 'Falling back to one drawIndexedIndirect per instance. ' + MULTI_DRAW_HELP,
+    multiDraw ? '' : 'Falling back to one drawIndexedIndirect per instance. ' + MULTI_DRAW_HELP,
     !multiDraw)
 
   panel.toggle.disabled = !multiDraw
@@ -94,7 +87,7 @@ async function run () {
 // Without multi-draw a huge model renders only its largest instances, so
 // say so instead of leaving the missing pieces a mystery.
 function loadedNote (viewer, multiDraw) {
-  if (multiDraw) return CONTROLS_HELP + ' Drop a .bos or .bfast file to load your own.'
+  if (multiDraw) return ''
   const r = viewer.renderer
   const limited = r.fallbackActive
     ? `Showing the ${fmt(r.drawnCount)} largest of ${fmt(r.drawCount)} instances. `

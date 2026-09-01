@@ -1,4 +1,4 @@
-import { GpuBytes } from './gpuBytes'
+import { GpuBytes, byteLength } from './gpuBytes'
 import { GpuVertices } from './gpuVertices'
 
 /** Number of 32-bit words in one `DrawIndexedIndirect` command. */
@@ -46,3 +46,15 @@ export type GpuScene = {
 
 export const drawCount = (s: GpuScene) => s.drawCommands.length / DRAW_COMMAND_WORDS
 export const instanceCount = (s: GpuScene) => s.instanceIds.length
+
+/** Triangles drawn when every command runs, counting each instance it draws. */
+export const instancedTriangleCount = (s: GpuScene) => {
+  let indices = 0
+  for (let i = 0; i < s.drawCommands.length; i += DRAW_COMMAND_WORDS) {
+    indices += s.drawCommands[i] * s.drawCommands[i + 1]
+  }
+  return indices / 3
+}
+
+/** Triangles in the shared mesh geometry, counted once regardless of instancing. */
+export const meshTriangleCount = (s: GpuScene) => byteLength(s.indices) / 4 / 3

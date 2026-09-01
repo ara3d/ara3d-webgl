@@ -8,7 +8,7 @@ import {
   toCameraSpace,
   useWebGpuProjection
 } from './gpuCameraView'
-import { GpuScene, instanceCount } from './gpuScene'
+import { GpuScene, instanceCount, instancedTriangleCount, meshTriangleCount } from './gpuScene'
 
 /** What the viewer reports once per frame. */
 export type FrameStats = {
@@ -18,7 +18,10 @@ export type FrameStats = {
     drawCommands: number;
     /** Commands actually submitted, which is lower than drawCommands when culling. */
     drawnCommands: number;
+    /** Triangles across every instance drawn. */
     triangles: number;
+    /** Triangles in the shared mesh geometry, before instancing. */
+    meshTriangles: number;
     multiDraw: boolean;
     culling: boolean;
 }
@@ -46,6 +49,7 @@ export class GpuViewer {
   private frameStart = 0
   private cpuMs = 0
   private triangles = 0
+  private meshTriangles = 0
   private lastFrameAt = 0
   private lastUpdateAt = 0
   private stalled = false
@@ -80,7 +84,8 @@ export class GpuViewer {
 
   setScene (scene: GpuScene) {
     this.renderer.setScene(scene)
-    this.triangles = scene.triangleCount
+    this.triangles = instancedTriangleCount(scene)
+    this.meshTriangles = meshTriangleCount(scene)
 
     const bounds = toCameraSpace(new THREE.Box3(
       new THREE.Vector3().fromArray(scene.boundsMin),
@@ -155,6 +160,7 @@ export class GpuViewer {
         drawCommands: this.renderer.drawCount,
         drawnCommands: this.renderer.drawnCount,
         triangles: this.triangles,
+        meshTriangles: this.meshTriangles,
         multiDraw: this.renderer.useMultiDraw && this.context.multiDraw,
         culling: this.renderer.cullingActive
       })

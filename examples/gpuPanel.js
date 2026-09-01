@@ -9,7 +9,16 @@ const STYLE = `
   background: rgba(20, 22, 26, 0.82); border: 1px solid #333a44; border-radius: 6px;
   min-width: 280px; pointer-events: auto;
 }
-.gpu-panel h2 { font-size: 13px; margin: 0 0 8px; color: #9fd0ff; font-weight: 600; }
+.gpu-panel h2 {
+  font-size: 13px; margin: 0; color: #9fd0ff; font-weight: 600;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.gpu-panel.open h2 { margin-bottom: 8px; }
+.gpu-rollup {
+  font: inherit; color: #9aa4b2; background: none; border: 1px solid #333a44;
+  border-radius: 4px; width: 22px; height: 22px; cursor: pointer; line-height: 1;
+}
+.gpu-rollup:hover { color: #e8ecf2; border-color: #55606e; }
 .gpu-row { display: flex; justify-content: space-between; gap: 16px; }
 .gpu-row span:last-child { color: #ffd479; }
 .gpu-note { margin-top: 8px; color: #9aa4b2; }
@@ -36,7 +45,8 @@ const ROWS = [
   ['status', 'Multi-draw'],
   ['draws', 'Draw commands'],
   ['drawn', 'Submitted'],
-  ['tris', 'Triangles'],
+  ['meshtris', 'Mesh triangles'],
+  ['tris', 'Triangles (all instances)'],
   ['fps', 'FPS'],
   ['cpu', 'CPU ms / frame']
 ]
@@ -56,9 +66,11 @@ export function createGpuPanel () {
   page.appendChild(canvas)
 
   const panel = document.createElement('div')
-  panel.className = 'gpu-panel'
+  panel.className = 'gpu-panel open'
   panel.innerHTML =
-    '<h2>BIM Open Schema &mdash; WebGPU multiDrawIndexedIndirect</h2>' +
+    '<h2><span>BIM Open Schema &mdash; WebGPU multiDrawIndexedIndirect</span>' +
+    '<button class="gpu-rollup" id="gpu-rollup" title="Hide the panel">&#9650;</button></h2>' +
+    '<div id="gpu-body">' +
     ROWS.map(([id, label]) =>
       `<div class="gpu-row"><span>${label}</span><span id="gpu-${id}">-</span></div>`).join('') +
     '<div class="gpu-note" id="gpu-note">Starting up...</div>' +
@@ -70,13 +82,23 @@ export function createGpuPanel () {
     'GPU contribution culling</label>' +
     '<div class="gpu-slider"><input type="range" id="gpu-contrib-px" ' +
     'min="0" max="1000" step="1" disabled>' +
-    '<span id="gpu-contrib-value">-</span></div>'
+    '<span id="gpu-contrib-value">-</span></div>' +
+    '</div>'
   page.appendChild(panel)
 
   document.body.appendChild(page)
 
   const cell = (id) => document.getElementById('gpu-' + id)
   const note = cell('note')
+  const body = cell('body')
+  const rollup = cell('rollup')
+  rollup.addEventListener('click', () => {
+    const open = body.style.display !== 'none'
+    body.style.display = open ? 'none' : ''
+    panel.classList.toggle('open', !open)
+    rollup.innerHTML = open ? '&#9660;' : '&#9650;'
+    rollup.title = open ? 'Show the panel' : 'Hide the panel'
+  })
   const toggle = cell('multi')
   const cullToggle = cell('cull')
   const contribToggle = cell('contrib')
@@ -103,6 +125,7 @@ export function createGpuPanel () {
     setNote (text, bad = false) {
       note.textContent = text
       note.className = bad ? 'gpu-note bad' : 'gpu-note'
+      note.style.display = text ? '' : 'none'
     }
   }
 }
@@ -115,6 +138,7 @@ export function showStats (panel, stats) {
   panel.set('cpu', stats.cpuMs.toFixed(2))
   panel.set('draws', fmt(stats.drawCommands))
   panel.set('drawn', stats.drawnCommands < stats.drawCommands ? fmt(stats.drawnCommands) : 'all')
+  panel.set('meshtris', fmt(Math.round(stats.meshTriangles)))
   panel.set('tris', fmt(Math.round(stats.triangles)))
 }
 

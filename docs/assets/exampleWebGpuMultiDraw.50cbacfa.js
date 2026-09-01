@@ -5,7 +5,7 @@ var __publicField = (obj, key, value) => {
   return value;
 };
 import "./modulepreload-polyfill.c7c6310f.js";
-import { c as columnVertices, a as cpuBytes, I as INSTANCE_FLOATS, D as DRAW_COMMAND_WORDS, b as buildGpuSceneFromTables, i as interleavedVertices, g as gpuBytes, d as buildGpuSceneFromModel, e as instanceCount, f as drawCount, r as requestGpuContext, h as isWebGpuAvailable, M as MULTI_DRAW_HELP } from "./buildGpuSceneFromModel.4980941e.js";
+import { c as columnVertices, a as cpuBytes, I as INSTANCE_FLOATS, D as DRAW_COMMAND_WORDS, b as buildGpuSceneFromTables, i as interleavedVertices, g as gpuBytes, d as buildGpuSceneFromModel, e as instanceCount, f as drawCount, r as requestGpuContext, h as instancedTriangleCount, m as meshTriangleCount, j as isWebGpuAvailable, M as MULTI_DRAW_HELP } from "./buildGpuSceneFromModel.e01cea5b.js";
 import { s as Matrix4, a as Vector3, e_ as Quaternion, gb as JSZip, l as loadBimGeometryFromZip, F as Frustum, f_ as WebGPUCoordinateSystem, cJ as Box3 } from "./bimOpenSchemaLoader.69b9fd7e.js";
 import { s as readRenderModelTables, R as RENDER_MODEL_BUFFERS, i as isBFast, d as readBFast, q as isRenderModel, t as readRenderModel, b as BFAST_HEADER_PROBE } from "./renderModel.76ea7852.js";
 import { B as BFastStreamReader, m as memorySink, C as CameraControls } from "./bfastStream.5fe1e8fa.js";
@@ -965,6 +965,7 @@ class GpuViewer {
     __publicField(this, "frameStart", 0);
     __publicField(this, "cpuMs", 0);
     __publicField(this, "triangles", 0);
+    __publicField(this, "meshTriangles", 0);
     __publicField(this, "lastFrameAt", 0);
     __publicField(this, "lastUpdateAt", 0);
     __publicField(this, "stalled", false);
@@ -1006,6 +1007,7 @@ class GpuViewer {
           drawCommands: this.renderer.drawCount,
           drawnCommands: this.renderer.drawnCount,
           triangles: this.triangles,
+          meshTriangles: this.meshTriangles,
           multiDraw: this.renderer.useMultiDraw && this.context.multiDraw,
           culling: this.renderer.cullingActive
         });
@@ -1038,7 +1040,8 @@ class GpuViewer {
   }
   setScene(scene) {
     this.renderer.setScene(scene);
-    this.triangles = scene.triangleCount;
+    this.triangles = instancedTriangleCount(scene);
+    this.meshTriangles = meshTriangleCount(scene);
     const bounds = toCameraSpace(new Box3(
       new Vector3().fromArray(scene.boundsMin),
       new Vector3().fromArray(scene.boundsMax)
@@ -1078,7 +1081,16 @@ const STYLE = `
   background: rgba(20, 22, 26, 0.82); border: 1px solid #333a44; border-radius: 6px;
   min-width: 280px; pointer-events: auto;
 }
-.gpu-panel h2 { font-size: 13px; margin: 0 0 8px; color: #9fd0ff; font-weight: 600; }
+.gpu-panel h2 {
+  font-size: 13px; margin: 0; color: #9fd0ff; font-weight: 600;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.gpu-panel.open h2 { margin-bottom: 8px; }
+.gpu-rollup {
+  font: inherit; color: #9aa4b2; background: none; border: 1px solid #333a44;
+  border-radius: 4px; width: 22px; height: 22px; cursor: pointer; line-height: 1;
+}
+.gpu-rollup:hover { color: #e8ecf2; border-color: #55606e; }
 .gpu-row { display: flex; justify-content: space-between; gap: 16px; }
 .gpu-row span:last-child { color: #ffd479; }
 .gpu-note { margin-top: 8px; color: #9aa4b2; }
@@ -1096,7 +1108,8 @@ const ROWS = [
   ["status", "Multi-draw"],
   ["draws", "Draw commands"],
   ["drawn", "Submitted"],
-  ["tris", "Triangles"],
+  ["meshtris", "Mesh triangles"],
+  ["tris", "Triangles (all instances)"],
   ["fps", "FPS"],
   ["cpu", "CPU ms / frame"]
 ];
@@ -1111,12 +1124,21 @@ function createGpuPanel() {
   canvas.tabIndex = 0;
   page.appendChild(canvas);
   const panel = document.createElement("div");
-  panel.className = "gpu-panel";
-  panel.innerHTML = "<h2>BIM Open Schema &mdash; WebGPU multiDrawIndexedIndirect</h2>" + ROWS.map(([id, label]) => `<div class="gpu-row"><span>${label}</span><span id="gpu-${id}">-</span></div>`).join("") + '<div class="gpu-note" id="gpu-note">Starting up...</div><label class="gpu-toggle"><input type="checkbox" id="gpu-multi" checked disabled>Use multiDrawIndexedIndirect</label><label class="gpu-toggle"><input type="checkbox" id="gpu-cull" disabled>GPU frustum culling</label><label class="gpu-toggle"><input type="checkbox" id="gpu-contrib" disabled>GPU contribution culling</label><div class="gpu-slider"><input type="range" id="gpu-contrib-px" min="0" max="1000" step="1" disabled><span id="gpu-contrib-value">-</span></div>';
+  panel.className = "gpu-panel open";
+  panel.innerHTML = '<h2><span>BIM Open Schema &mdash; WebGPU multiDrawIndexedIndirect</span><button class="gpu-rollup" id="gpu-rollup" title="Hide the panel">&#9650;</button></h2><div id="gpu-body">' + ROWS.map(([id, label]) => `<div class="gpu-row"><span>${label}</span><span id="gpu-${id}">-</span></div>`).join("") + '<div class="gpu-note" id="gpu-note">Starting up...</div><label class="gpu-toggle"><input type="checkbox" id="gpu-multi" checked disabled>Use multiDrawIndexedIndirect</label><label class="gpu-toggle"><input type="checkbox" id="gpu-cull" disabled>GPU frustum culling</label><label class="gpu-toggle"><input type="checkbox" id="gpu-contrib" disabled>GPU contribution culling</label><div class="gpu-slider"><input type="range" id="gpu-contrib-px" min="0" max="1000" step="1" disabled><span id="gpu-contrib-value">-</span></div></div>';
   page.appendChild(panel);
   document.body.appendChild(page);
   const cell = (id) => document.getElementById("gpu-" + id);
   const note = cell("note");
+  const body = cell("body");
+  const rollup = cell("rollup");
+  rollup.addEventListener("click", () => {
+    const open = body.style.display !== "none";
+    body.style.display = open ? "none" : "";
+    panel.classList.toggle("open", !open);
+    rollup.innerHTML = open ? "&#9660;" : "&#9650;";
+    rollup.title = open ? "Show the panel" : "Hide the panel";
+  });
   const toggle = cell("multi");
   const cullToggle = cell("cull");
   const contribToggle = cell("contrib");
@@ -1144,6 +1166,7 @@ function createGpuPanel() {
     setNote(text, bad = false) {
       note.textContent = text;
       note.className = bad ? "gpu-note bad" : "gpu-note";
+      note.style.display = text ? "" : "none";
     }
   };
 }
@@ -1153,10 +1176,10 @@ function showStats(panel, stats) {
   panel.set("cpu", stats.cpuMs.toFixed(2));
   panel.set("draws", fmt(stats.drawCommands));
   panel.set("drawn", stats.drawnCommands < stats.drawCommands ? fmt(stats.drawnCommands) : "all");
+  panel.set("meshtris", fmt(Math.round(stats.meshTriangles)));
   panel.set("tris", fmt(Math.round(stats.triangles)));
 }
 const DEFAULT_MODEL = "Snowdon Towers Sample Architectural.bos";
-const CONTROLS_HELP = "Left drag orbits, middle drag pans, right drag looks. Wheel zooms, W/A/S/D or arrows fly, Q/E go down/up, +/- change speed, F frames the model, Home resets, P toggles orthographic.";
 const requested = new URLSearchParams(location.search).get("model") ?? DEFAULT_MODEL;
 const MODEL = /^https?:\/\//.test(requested) ? requested : "/ara3d-webgl/" + requested;
 async function run() {
@@ -1176,7 +1199,7 @@ async function run() {
   panel.set("adapter", viewer.context.adapterInfo);
   panel.set("status", multiDraw ? "supported" : "not available");
   panel.setNote(
-    multiDraw ? "One call per pass draws the whole model. Untick to compare against one drawIndexedIndirect per instance." : "Falling back to one drawIndexedIndirect per instance. " + MULTI_DRAW_HELP,
+    multiDraw ? "" : "Falling back to one drawIndexedIndirect per instance. " + MULTI_DRAW_HELP,
     !multiDraw
   );
   panel.toggle.disabled = !multiDraw;
@@ -1215,7 +1238,7 @@ async function run() {
 }
 function loadedNote(viewer, multiDraw) {
   if (multiDraw)
-    return CONTROLS_HELP + " Drop a .bos or .bfast file to load your own.";
+    return "";
   const r = viewer.renderer;
   const limited = r.fallbackActive ? `Showing the ${fmt(r.drawnCount)} largest of ${fmt(r.drawCount)} instances. ` : "";
   return "Multi-draw unavailable. " + limited + MULTI_DRAW_HELP;
@@ -1242,4 +1265,4 @@ function enableFileDrop(panel, viewer, loader) {
   });
 }
 run();
-//# sourceMappingURL=exampleWebGpuMultiDraw.51f04ddb.js.map
+//# sourceMappingURL=exampleWebGpuMultiDraw.50cbacfa.js.map

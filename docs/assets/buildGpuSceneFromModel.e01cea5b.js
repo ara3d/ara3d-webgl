@@ -40,13 +40,21 @@ function describeAdapter(adapter) {
   return [info.vendor, info.architecture, info.device, info.description].filter((s) => !!s).join(" ");
 }
 const MULTI_DRAW_HELP = "Launch Chrome or Edge with --enable-dawn-features=multi_draw_indirect and --enable-unsafe-webgpu.";
+const cpuBytes = (data) => ({ kind: "cpu", data });
+const gpuBytes = (gpuBuffer, byteLength2) => ({ kind: "gpu", gpuBuffer, byteLength: byteLength2 });
+const byteLength = (b) => b.kind === "gpu" ? b.byteLength : b.data.byteLength;
 const DRAW_COMMAND_WORDS = 5;
 const INSTANCE_FLOATS = 20;
 const drawCount = (s) => s.drawCommands.length / DRAW_COMMAND_WORDS;
 const instanceCount = (s) => s.instanceIds.length;
-const cpuBytes = (data) => ({ kind: "cpu", data });
-const gpuBytes = (gpuBuffer, byteLength2) => ({ kind: "gpu", gpuBuffer, byteLength: byteLength2 });
-const byteLength = (b) => b.kind === "gpu" ? b.byteLength : b.data.byteLength;
+const instancedTriangleCount = (s) => {
+  let indices = 0;
+  for (let i = 0; i < s.drawCommands.length; i += DRAW_COMMAND_WORDS) {
+    indices += s.drawCommands[i] * s.drawCommands[i + 1];
+  }
+  return indices / 3;
+};
+const meshTriangleCount = (s) => byteLength(s.indices) / 4 / 3;
 const columnVertices = (x, y, z, scale) => ({
   buffers: [x, y, z].map((column, i) => ({
     bytes: cpuBytes(column),
@@ -187,8 +195,10 @@ export {
   instanceCount as e,
   drawCount as f,
   gpuBytes as g,
-  isWebGpuAvailable as h,
+  instancedTriangleCount as h,
   interleavedVertices as i,
+  isWebGpuAvailable as j,
+  meshTriangleCount as m,
   requestGpuContext as r
 };
-//# sourceMappingURL=buildGpuSceneFromModel.4980941e.js.map
+//# sourceMappingURL=buildGpuSceneFromModel.e01cea5b.js.map
