@@ -108,3 +108,7 @@ present, and models opened from the menu render through it:
 | Snowdon Towers Sample Architectural.bos | 9 MB | 29,666 | 6.2M | 177 |
 | snowdon.bfast | 54 MB | 29,666 | 6.2M | 128 |
 | skyscraper-mep.bfast | 1.8 GB | 840,668 | 234M | 122 |
+| nbk-test.bfast | 3.2 GB | 1,615,358 | 301M | 0.6 |
+
+The last one loads and draws but is not interactive on this GPU. At 2.2 ms
+of CPU per frame the draw calls are not the limit; the integrated GPU is.
