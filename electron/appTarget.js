@@ -30,8 +30,25 @@ function resolveTarget (argv = process.argv, env = process.env) {
     dir: path.resolve(flag(argv, 'dir') ?? env.ARA3D_DIR ?? DEFAULTS.dir),
     base: flag(argv, 'base') ?? env.ARA3D_BASE ?? DEFAULTS.base,
     page: flag(argv, 'page') ?? env.ARA3D_PAGE ?? DEFAULTS.page,
+    modelDirs: modelDirs(argv, env),
     devtools: argv.includes('--devtools')
   }
+}
+
+/**
+ * Directories scanned for the Sample Models menu. The served build and the
+ * examples' own folder, where the large `.bfast` render models live.
+ */
+function modelDirs (argv, env) {
+  const given = flag(argv, 'models') ?? env.ARA3D_MODELS
+  if (given) return directoryList(given)
+  const dir = path.resolve(flag(argv, 'dir') ?? env.ARA3D_DIR ?? DEFAULTS.dir)
+  return [dir, path.join(REPO_ROOT, 'examples', 'public')]
+}
+
+/** Splits a PATH-style list of directories. */
+function directoryList (value) {
+  return value.split(path.delimiter).map((d) => d.trim()).filter(Boolean).map((d) => path.resolve(d))
 }
 
 /** Joins an origin, base and page into the URL to load. */

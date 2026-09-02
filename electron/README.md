@@ -14,6 +14,22 @@ npm run electron
 That serves the checked-in build in `docs/` on a local port and opens
 `example-webgpu-multidraw.html`.
 
+## Opening models
+
+**File > Sample Models** lists every `.bfast` and `.bos` found in `docs/` and
+`examples/public/`, with its size. **File > Open Model...** (Ctrl+O, Cmd+O on a
+Mac) opens any other file.
+
+Neither path copies or reads the file in the main process. The chosen path is
+registered with the local server, and the page is reloaded with
+`?model=<local url>` -- the same query parameter the examples already accept in
+a browser. Only files picked from the menu are reachable over the server, so
+opening a model does not expose the folder it came from.
+
+Large `.bfast` render models are the reason this exists: they are too big to
+commit, so they are not in `docs/`, and dragging a multi-gigabyte file onto the
+window is awkward.
+
 Against the Vite dev server instead, with `npm run dev` already running:
 
 ```
@@ -38,6 +54,7 @@ missing.
 | `--dir=` | `ARA3D_DIR` | Directory to serve. Default `docs/`. |
 | `--base=` | `ARA3D_BASE` | Path prefix the build was made with. Default `/ara3d-webgl/`. |
 | `--page=` | `ARA3D_PAGE` | Page to open. Default `example-webgpu-multidraw.html`. |
+| `--models=` | `ARA3D_MODELS` | Directories listed in the Sample Models menu, separated by `;` on Windows and `:` elsewhere. Default: the served directory and `examples/public/`. |
 | `--devtools` | | Open developer tools in a separate window. |
 
 ## Files
@@ -48,6 +65,9 @@ missing.
 | `gpuSwitches.js` | The Chromium switches, per platform. |
 | `appTarget.js` | Turns arguments and environment into a URL to load. |
 | `staticServer.js` | Read-only file server on localhost. |
+| `routes.js` | The two ways a request path becomes a file: a served directory, and opened files. |
+| `modelFiles.js` | Finds model files on disk for the menu. |
+| `menu.js` | The application menu. |
 | `mimeTypes.js` | Content types by file extension. |
 | `window.js` | The browser window and its security settings. |
 | `checkFeatures.js` | Prints the adapter's WebGPU feature list and exits. |
@@ -80,6 +100,11 @@ distributable build also needs code signing and notarization.
 
 ## Verified
 
-On Windows 11 with an Intel Xe-LPG integrated GPU: the multi-draw feature is
-present, and the Snowdon Towers sample renders 29,666 draw commands in a single
-`multiDrawIndexedIndirect` call at roughly 175 frames per second.
+On Windows 11 with an Intel Xe-LPG integrated GPU the multi-draw feature is
+present, and models opened from the menu render through it:
+
+| Model | Size | Draw commands | Triangles | FPS |
+| --- | --- | --- | --- | --- |
+| Snowdon Towers Sample Architectural.bos | 9 MB | 29,666 | 6.2M | 177 |
+| snowdon.bfast | 54 MB | 29,666 | 6.2M | 128 |
+| skyscraper-mep.bfast | 1.8 GB | 840,668 | 234M | 122 |
