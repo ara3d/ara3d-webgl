@@ -28,13 +28,17 @@
         "preview:docs": "vite preview --mode github --config vite.config.docs.js --host",
         "serve:docs": "http-server ./docs -o --host",
         "eslint": "eslint --ext .js,.ts src --fix",
-        "gentypes": "tsc --declaration --emitDeclarationOnly --outdir ./dist/types"
+        "gentypes": "tsc --declaration --emitDeclarationOnly --outdir ./dist/types",
+        "electron": "electron electron/main.js",
+        "electron:dev": "electron electron/main.js --url=http://localhost:5173 --devtools",
+        "electron:check": "electron electron/checkFeatures.js"
     },
     "devDependencies": {
         "@types/axios": "^0.14.0",
         "@typescript-eslint/eslint-plugin": "^5.45.1",
         "@typescript-eslint/parser": "^5.45.1",
         "@webgpu/types": "^0.1.72",
+        "electron": "^44.1.1",
         "eslint": "^8.29.0",
         "eslint-config-prettier": "^8.5.0",
         "eslint-config-standard": "^17.0.0",

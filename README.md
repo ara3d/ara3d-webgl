@@ -122,6 +122,9 @@ chrome --enable-unsafe-webgpu --enable-dawn-features=multi_draw_indirect
 Without the flag the demo still runs on the fallback path and says so. The
 `indirect-first-instance` WebGPU feature is required either way.
 
+To avoid the flag, `npm run electron` opens the same demo in an Electron window
+that sets those switches for itself. See [electron/README.md](electron/README.md).
+
 Measured on an Intel Xe-LPG integrated GPU with the Snowdon Towers sample
 (29,666 instances, 6.2M triangles, 1384x749):
 
